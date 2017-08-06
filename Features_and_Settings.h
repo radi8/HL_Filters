@@ -30,25 +30,26 @@
 
 // The following define which ATMega pins activate which TX filter. Note that the 12/10M filter is always
 // in line as a roofing filter
-
 const uint8_t LP12_10 = 0;  // All Band bits clear = 10M filter in circuit and all other filters out.
-
 const uint8_t LP160   = A3; // pin 26 set = 160M filter selected. Clear = filter not selected
 const uint8_t LP80    = A2; // pin 25 set = 80M filter selected. Clear = filter not selected
 const uint8_t LP60_40 = A1; // pin 24 set = 60/40M filter selected. Clear = filter not selected
 const uint8_t LP30_20 = A0; // pin 23 set = 30/20M filter selected. Clear = filter not selected
-const uint8_t LP17_15 =   0; // pin 17 set = 17/15M filter selected. Clear = filter not selected
-const uint8_t LPthru  =   0; // pin 16 set = Roofing filter only. Must clear all other TX filters
+const uint8_t LP17_15 = 13; // pin 17 set = 17/15M filter selected. Clear = filter not selected
+const uint8_t LPthru  = 12; // pin 16 set = Roofing filter only. Must clear all other TX filters
 
-// Available Receive Filters. Edit the bit associated with the filter to suit wiring of circuit
-
-const uint8_t HP160   = 0;  // Released = 160M. Bit 0 = Lo
+// The following define which ATMega pins activate which RX filter
 const uint8_t HPthru  = 1;  // Operated = thru mode; Bit 0 = Hi
+const uint8_t HP160   = 0;  // Released = 160M. Bit 0 = Lo
 const uint8_t HP80_60 = 2;  // Operated = 80M/60.  Bit 1 = Hi
 const uint8_t HP40_30 = 4;  // Operated = 40/30M  Bit 2 Hi
 const uint8_t HP20_17 = 8;  // Operated = 20/17M. Bit 3 Hi
 const uint8_t HP15_10 = 16; // Operated = 15-10M. Bit 4 Hi
 
+// The following defines the pins for the TX and RX path switches. Note either one or the other is set
+// Never both at once either off or on.
+const uint8_t Tx  = 1;  // Set connects the Tx path from PA out to Antenna
+const uint8_t Rx   = 2;  // Set connects the Rx path from Antenna to Rx in via the Tx relay path
 
 
 // Here we build the map of what filters will be selected from the word formed
