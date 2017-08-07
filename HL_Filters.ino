@@ -1,14 +1,17 @@
-//////////////////////////////////////////////////////////////////
-// Copyright ©2015 Graeme Jury ZL2APV
-// Released under the GPL v2 License - Please alter and share.
-// Control lines expansion for Hermes-Lite
-//////////////////////////////////////////////////////////////////
+/*****************************************************************
+ * 
+ * Copyright ©2015 Graeme Jury ZL2APV
+ * Released under the GPL v2 License - Please alter and share.
+ * Control lines expansion for Hermes-Lite
 
-/*
+ * Filename: HL_Filters.ino
+ *
+ * This program runs on an Atmega328P using the internal clock.
+ * 
 The Hermes-Lite project was first pioneered by Steve Haynal KF7O and the first set of boards and practical
 build was pioneered by Rob Frohne KL7NA. From there numerous others have joined in to create this game
 changing project.
-*/
+*****************************************************************/
 
 
 
