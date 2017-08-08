@@ -36,7 +36,7 @@ const uint8_t LP80    = A2; // pin 25 (PC2) set = 80M filter selected. Clear = f
 const uint8_t LP60_40 = A1; // pin 24 (PC1) set = 60/40M filter selected. Clear = filter not selected
 const uint8_t LP30_20 = A0; // pin 23 (PC0) set = 30/20M filter selected. Clear = filter not selected
 const uint8_t LP17_15 = 13; // pin 17 (PB5) set = 17/15M filter selected. Clear = filter not selected
-const uint8_t LPthru  = 12; // pin 16 (PB4) set = Roofing filter only. Must clear all other TX filters
+const uint8_t LPthru  = 12; // pin 16 (PB4) set = LP12_10 Roofing filter only, always in cct.
 
 // The following define which ATMega pins activate which RX filter
 const uint8_t HPthru  = 10; // Pin 14 (PB2) set = Through pass selected, no filters in circuit
