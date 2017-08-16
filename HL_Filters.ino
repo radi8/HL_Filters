@@ -52,7 +52,13 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
       7 Rptt    out   |       7 ???     in    |       7 HP30  out
 */
 
-
+struct status {
+  uint8_t J16signals;
+  uint8_t txFilterNum;
+  uint8_t rxFilterNum;
+  boolean TxRx_State;
+}
+_status;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main code starts here
@@ -86,12 +92,15 @@ void setup() {
   
 #if defined(FEATURE_I2C_LCD)
   lcd.begin(lcdNumRows, lcdNumCols);
+  lcd_PrintSplash();
 #endif  
 
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+#if defined(FEATURE_I2C_LCD)
+  lcd_DisplayStatus();
+#endif
 
 }
 
@@ -100,14 +109,37 @@ void loop() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if defined(FEATURE_I2C_LCD)
-void lcdPrintSplash()
+void lcd_PrintSplash()
 {
   lcd.home();                   // go home
-  lcd.print(F("ARDUINO TUNER by"));
+  lcd.print(F("Hermes-Lite     "));
   lcd.setCursor (0, 1);        // go to the next line
-  lcd.print(F("ZL2APV (c) 2015 "));
-  //  lcd.backlight(); // finish with backlight on
-  //  delay ( 5000 );
+  lcd.print(F("Smart Filter v1 "));
 }
 #endif
+
+#if defined(FEATURE_I2C_LCD)
+void lcd_DisplayStatus()
+{
+  char TR_State; // Convert bool 0 or 1 to "T" or "R"
+
+  if(_status.TxRx_State){
+    TR_State = "T";
+  }else{
+    TR_State = "R";
+  }
+  lcd.home();                   // go home
+//lcd.print(F("0123456789012345")); I am using this for display template
+  lcd.print(F("HP = x & LP = y "));
+  lcd.print(_status.txFilterNum); // Tx filters = 1 to 6.
+  lcd.print(F(" & LP = "));
+  lcd.print(_status.rxFilterNum); // Rx filters = 1 to 5.
+  lcd.setCursor (0, 1);        // go to the next line (column, row)
+  lcd.print(F("TR = "));
+  lcd.print(TR_State); // T-R_State either "T" or "R"
+  lcd.print(F(", Dat = "));
+  lcd.print(_status.J16signals);
+}
+#endif
+
 /**********************************************************************************************************/
