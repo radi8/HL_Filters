@@ -60,6 +60,8 @@ struct status {
 }
 _status;
 
+status lastState;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main code starts here
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -74,6 +76,8 @@ _status;
 // End of includes
 
 // Global values
+const boolean RX = false;
+const boolean TX = true;
 #if defined(FEATURE_I2C_LCD)
   // Set the pins on the I2C chip used for LCD connections:
   //                       addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
@@ -90,11 +94,16 @@ void setup() {
   PORTC = 0b10000000;
   PORTD = 0b00000000;
   
-#if defined(FEATURE_I2C_LCD)
+#if defined(FEATURE_I2C_LCD) // Setup the display if enabled
   lcd.begin(lcdNumRows, lcdNumCols);
   lcd_PrintSplash();
 #endif  
 
+// Initialise the board
+  _status.J16signals = 0;
+  _status.txFilterNum = 0;
+  _status.rxFilterNum = 0;
+  _status.TxRx_State = RX;
 }
 
 void loop() {
@@ -121,25 +130,33 @@ void lcd_PrintSplash()
 #if defined(FEATURE_I2C_LCD)
 void lcd_DisplayStatus()
 {
-  char TR_State; // Convert bool 0 or 1 to "T" or "R"
-
-  if(_status.TxRx_State){
-    TR_State = "T";
-  }else{
-    TR_State = "R";
-  }
   lcd.home();                   // go home
 //lcd.print(F("0123456789012345")); I am using this for display template
-  lcd.print(F("HP = x & LP = y "));
+  lcd.print(F("HP = "));
   lcd.print(_status.txFilterNum); // Tx filters = 1 to 6.
   lcd.print(F(" & LP = "));
   lcd.print(_status.rxFilterNum); // Rx filters = 1 to 5.
   lcd.setCursor (0, 1);        // go to the next line (column, row)
   lcd.print(F("TR = "));
-  lcd.print(TR_State); // T-R_State either "T" or "R"
+  lcd.print(_status.TxRx_State); // T-R_State either "TX" or "RX"
   lcd.print(F(", Dat = "));
   lcd.print(_status.J16signals);
 }
 #endif
 
+void applyStatus()
+{
+  // If transmitting, go to receive so we don't hot switch any filters and tell HL to stop Transmit
+  if(_status.TxRx_State == TX){
+    // Code here to tell Hermes-Lite to stop transmitting if possible
+    PORTD &= ~(1<<Tptt); // Set TX ptt LOW (Atmega328 pin ??)
+    PORTB |= (1<<Rptt);
+  }
+  // Switch the Transmit and Receive filters
+  if(_status.J16signals == 0xff){ // If J16 signals = 0xff then all pullups are active due to no signals
+    // Put code to switch Tx and Rx filters based on J16 data here.
+  }else{ // We have no J16 data so use the I2C bus signals
+    // Put code to switch Tx and Rx filters based on I2C data here.
+  }
+}
 /**********************************************************************************************************/
