@@ -52,32 +52,43 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
       7 Rptt    out   |       7 ???     in    |       7 HP30  out
 */
 
-struct status {
-  uint8_t J16signals;
-  uint8_t txFilterNum;
-  uint8_t rxFilterNum;
-  boolean TxRx_State; // true = Tx, false = Rx
-}
-_status;
-
-status lastState;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////const uint16_t LP12_10 = (PORTC << 8) + PC3;  // All Band bits clear = 10M filter in circuit and all other filters out.//////////////////////////////////////////////////////////////////////////////
 // Main code starts here
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Add includes here
 #include "Features_and_Settings.h"
-
-#if defined(FEATURE_I2C_LCD)    // A 3.3 volt I2C LCD display is used to print debug messages and status
 #include <Wire.h>
+#if defined(FEATURE_I2C_LCD)    // A 3.3 volt I2C LCD display is used to print debug messages and status
 #include <LiquidCrystal_I2C.h>
 #endif
 // End of includes
 
-// Global values
-const boolean RX = false;
-const boolean TX = true;
+// I2C Globals and constants
+const byte MY_ADDRESS = 42;
+const byte OTHER_ADDRESS = 25;
+char I2C_sendBuf[32];
+char I2C_recBuf[32];
+long CMD = 0; //Commands received are placed in this variable
+
+boolean last_state = HIGH;
+
+struct status {
+  uint8_t J16signals;
+  uint16_t txFilterNum;
+  uint16_t rxFilterNum;
+  boolean TxRx_State; // true = Rx, false = Tx
+}
+_status;
+
+//status lastState;
+
+
+
+// System global values
+const boolean RX = true;
+const boolean TX = false;
+
 #if defined(FEATURE_I2C_LCD)
 // Set the pins on the I2C chip used for LCD connections:
 //                       addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
@@ -90,20 +101,23 @@ void setup() {
   DDRC = 0b00001111;  // bits 0 .. 3 outputs, bits 4 .. 7 inputs.
   DDRD = 0b11100000;  // bits 0 .. 4 inputs, bits 5 .. 7 outputs.
   //Set up so 160M Hi pass and 10M Lo pass filters in circuit with filters in RX mode
-  PORTB = 0b11001000;
-  PORTC = 0b10000000;
-  PORTD = 0b00000000;
+  PORTB = 0b11011000; // Pullup on PB6 and PB7 sets Rx mode
+  PORTC = 0b10110000; // SCL & SDA Pullups
+  PORTD = 0b00011111; // Pullups for inputs PD0..4
 
+  // Set the board's initial Status
+  _status.J16signals = 0xFF; // Assume not connected initially
+  _status.txFilterNum = LPthru;
+  _status.rxFilterNum = HP160;
+  _status.TxRx_State = RX;
+    
+Wire.begin (MY_ADDRESS);
+Wire.onReceive (receiveEvent);
 #if defined(FEATURE_I2C_LCD) // Setup the display if enabled
   lcd.begin(lcdNumRows, lcdNumCols);
   lcd_PrintSplash();
 #endif
 
-  // Initialise the board
-  _status.J16signals = 0;PORTC &= 0b11110000; //
-  _status.txFilterNum = 0;
-  _status.rxFilterNum = 0;
-  _status.TxRx_State = RX;PORTC &= 0b11110000; //
 }
 
 void loop() {
@@ -127,10 +141,11 @@ void lcd_PrintSplash()
 }
 #endif
 
+/**********************************************************************************************************/
 #if defined(FEATURE_I2C_LCD)
 void lcd_DisplayStatus()
 {
-  lcd.home();                   // go home
+  lcd.home();
   //lcd.print(F("0123456789012345")); I am using this for display template
   lcd.print(F("HP = "));
   lcd.print(_status.txFilterNum); // Tx filters = 1 to 6.
@@ -144,14 +159,33 @@ void lcd_DisplayStatus()
 }
 #endif
 
+/**********************************************************************************************************/
 void applyStatus()
 {
-  // If transmitting, go to receive so we don't hot switch any filters and tell HL to stop Transmit
-  PORTD &= 0b00011111; // HP30, HP17, Tptt cleared
-  PORTB |= (1 << Rptt); // Set to Rx mode
-  PORTC &= 0b11110000; // LP160, LP80, LP60-40, LP30-20 cleared
-  PORTB &= 0b11000000; // Rptt, n/a, LP17_15, LPthru, HP160, HPthru, HP80, HP40 cleared
-  _status.TxRx_State = false;
+  // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
+  if(_status.TxRx_State == RX) {
+    PORTD &= ~(1 << Tptt);  // Clear Tx mode
+    PORTB |= (1 << Rptt);   // Set to Rx mode
+  } else {
+    PORTB &= ~(1 << Rptt);  // Clear Rx mode
+    PORTD |= (1 << Tptt);   // Set to Tptt mode
+  }
+/*
+PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
+      1 HP80    out   |       1 LP60_40 out   |       1 NC    in (pullup)
+      2 HPthru  out   |       2 LP80    out   |       2 I1    in
+      3 HP160   out   |       3 LP160   out   |       3 I2    in
+      4 LPthru  out   |       4 SDA     in    |       4 I3    in
+      5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
+      6 I4      in    |       6 RESET   in    |       6 HP17  out
+      7 Rptt    out   |       7 ???     in    |       7 HP30  out
+*/      
+  // Now clear all the HP and LP filters except leave the LPthru filter connected
+  PORTB |= (1 << PB4); // Set the LPthru filter
+  PORTB &= 0b11010000; // PORTB 5, 3..0 = LP17_15, HP160, HPthru, HP80, HP40 cleared
+  PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
+  PORTD &= 0b00111111; // PORTC 7,6 = HP30, HP17 cleared
+  
   
   // Switch the Transmit and Receive filters
   if (_status.J16signals == 0xff) { // If J16 signals = 0xff then all pullups are active due to no signals
@@ -180,4 +214,84 @@ void applyStatus()
 //*/
   }
 }
+
+/************************** I2C subroutines ***************************************************************/
+
+// The slave is listening for commands from the master. Some commands are
+// for the slave to perform a task like set a digital output and these are
+// dealt with in the main loop. Other commands are for information to be
+// sent back to the master and these are dealt with in requestEvent().
+// The receiveEvent captures the sent command in CMD for processing by the
+// main loop or the requestEvent() interrupt driven subroutine
+
+void receiveEvent(int howMany)
+// called by I2C interrupt service routine when incoming data arrives.
+// The command is sent as a numeric string and is converted to a long.
+{
+  char * pEnd;
+
+  for (byte i = 0; i < howMany; i++)
+  {
+    I2C_recBuf[i] = Wire.read ();
+  }  // end of for loop
+  CMD = strtol(I2C_recBuf, &pEnd, 10);
+  Serial.print("@Slave:receiveEvent(), CMD = ");
+  Serial.println(CMD);
+}
+
+void requestEvent()
+// This is called if the master has asked the slave for information. The
+// command to identify which info has been received by receiveEvent and
+// placed into the global "CMD" variable.
+{
+  //  Serial.print("@Slave:requestEvent(), CMD = ");
+  //  Serial.println(CMD, 10);
+  switch (CMD)
+  {
+//    case CMD_READ_A0: sendSensor(A0, _volts); break;  // send A0 value
+//    case CMD_READ_A1: sendSensor(A1, _amps); break;  // send A1 value
+//    case CMD_READ_A2: sendSensor(A2, _analog2); break;  // send A2 value
+//    case CMD_READ_D2: Wire.write(digitalRead(2)); break;   // send D2 value
+//    case CMD_READ_D3: Wire.write(digitalRead(3)); break;   // send D3 value
+//    case CMD_STATUS: sendStatus();
+//    case CMD_ID: {
+//        memset(I2C_sendBuf, '\0', 32); // Clear the I2C Send Buffer
+//        strcpy(I2C_sendBuf, "Slave address = 9");
+    /*
+        int len = strlen(I2C_sendBuf);
+        I2C_sendBuf[len] = '\0';
+        for (byte i = 0; i <= len; i++) {
+          Wire.write(I2C_sendBuf[i]); // Chug out 1 character at a time
+        }  // end of for loop
+        /*    Wire.write(I2C_sendBuf);
+              Serial.print("@Slave:requestEvent(), Response sent = ");
+              Serial.println(I2C_sendBuf); */
+//          Wire.write(I2C_sendBuf);
+//        break;   // send our ID
+//      }
+  }  // end of switch
+  CMD = 0;
+}
+
+void sendSensor (const byte which, uint8_t cmd)
+// The integer value of the analog port is converted to a string and sent.
+{
+  int val = analogRead (which);
+//  uint8_t len;
+
+  memset(I2C_sendBuf, '\0', 32); // Clear the I2C Send Buffer
+  sprintf(I2C_sendBuf, "%d %d", cmd, val);
+//  len = strlen(I2C_sendBuf);
+/*  
+  I2C_sendBuf[len] = '\0';
+  for (byte i = 0; i <= len; i++)
+  {
+    Wire.write(I2C_sendBuf[i]); // Chug out one char at a time.
+  }  // end of for loop
+
+*/
+  Wire.write(I2C_sendBuf);
+//  Serial.println(I2C_sendBuf); // debug
+}  // end of sendSensor
+
 /**********************************************************************************************************/
