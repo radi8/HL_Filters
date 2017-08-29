@@ -32,20 +32,20 @@
 // The port and pin for each filter are defined as a 16 bit number with the HIGH 8 bits holding the port
 // and the LOW 8 bits holding the pin. they are retrieved by "PORT = v >> 8, PIN = v & 0xFF"
 // The Hi pass receive only filters
-const uint16_t HPthru  = (PORTB << 8) + PB2;  // Pin 14 (PB2) set = Through pass selected, no filters in circuit
-const uint16_t HP160   = (PORTB << 8) + PB3;  // Pin 15 (PB3) set = 17 up selected
-const uint16_t HP80    = (PORTB << 8) + PB1;  // Pin 13 (PB1) set = 17 up selected
-const uint16_t HP40    = (PORTB << 8) + PB0;  // Pin 12 (PB0) set = 17 up selected
-const uint16_t HP30    = (PORTD << 8) + PD7;  // Pin 11 (PD7) set = 17 up selected
-const uint16_t HP17    = (PORTD << 8) + PD6;  // Pin 10 (PD6) set = 17 up selected
+const uint16_t HPthru  = (PB2 << 8) + &PORTB; // Pin 14 (PB2) set = Through pass selected, no filters in circuit
+const uint16_t HP160   = (PB3 << 8) + &PORTB; // Pin 15 (PB3) set = 17 up selected
+const uint16_t HP80    = (PB1 << 8) + &PORTB; // Pin 13 (PB1) set = 17 up selected
+const uint16_t HP40    = (PB0 << 8) + &PORTB; // Pin 12 (PB0) set = 17 up selected
+const uint16_t HP30    = (PD7 << 8) + &PORTD; // Pin 11 (PD7) set = 17 up selected
+const uint16_t HP17    = (PD6 << 8) + &PORTD; // Pin 10 (PD6) set = 17 up selected
 
 // The Lo pass Transmit and receive filters
-const uint16_t LP160   = (PORTC << 8) + PC3;  // pin 26 set = 160M filter selected. Clear = filter not selected
-const uint16_t LP80    = (PORTC << 8) + PC2;  // pin 25 set = 80M filter selected. Clear = filter not selected
-const uint16_t LP60_40 = (PORTC << 8) + PC1;  // pin 24 set = 60/40M filter selected. Clear = filter not selected
-const uint16_t LP30_20 = (PORTC << 8) + PC0;  // pin 23 set = 30/20M filter selected. Clear = filter not selected
-const uint16_t LP17_15 = (PORTB << 8) + PB5;  // pin 17 set = 17/15M filter selected. Clear = filter not selected
-const uint16_t LPthru  = (PORTB << 8) + PB4;  // pin 16 set = LP12_10 Roofing filter only, always in cct.
+const uint16_t LP160   = (PC3 << 8) + &PORTC;  // pin 26 set = 160M filter selected. Clear = filter not selected
+const uint16_t LP80    = (PC2 << 8) + &PORTC;  // pin 25 set = 80M filter selected. Clear = filter not selected
+const uint16_t LP60_40 = (PC1 << 8) + &PORTC;  // pin 24 set = 60/40M filter selected. Clear = filter not selected
+const uint16_t LP30_20 = (PC0 << 8) + &PORTC;  // pin 23 set = 30/20M filter selected. Clear = filter not selected
+const uint16_t LP17_15 = (PB5 << 8) + &PORTB;  // pin 17 set = 17/15M filter selected. Clear = filter not selected
+const uint16_t LPthru  = (PB4 << 8) + &PORTB;  // pin 16 set = LP12_10 Roofing filter only, always in cct.
 
 /*
 // The following define which ATMega pins activate which TX filter. Note that the 12/10M filter is always

@@ -162,6 +162,9 @@ void lcd_DisplayStatus()
 /**********************************************************************************************************/
 void applyStatus()
 {
+  uint16_t *port;
+  uint16_t pin;
+  
   // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
   if(_status.TxRx_State == RX) {
     PORTD &= ~(1 << Tptt);  // Clear Tx mode
@@ -185,14 +188,24 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
   PORTB &= 0b11010000; // PORTB 5, 3..0 = LP17_15, HP160, HPthru, HP80, HP40 cleared
   PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
   PORTD &= 0b00111111; // PORTC 7,6 = HP30, HP17 cleared
+
+  // Turn on the new TX filter  
+  *port = (_status.txFilterNum & 0x00FF);
+  pin = (_status.txFilterNum >> 8);
+  *port |= (1 << pin);
   
+  // Turn on the new RX filter
+  *port = (_status.rxFilterNum & 0x00FF);
+  pin = (_status.rxFilterNum >> 8);
+  *port |= (1 << pin);
   
+/*  
   // Switch the Transmit and Receive filters
   if (_status.J16signals == 0xff) { // If J16 signals = 0xff then all pullups are active due to no signals
     // Put code to switch Tx and Rx filters based on I2C data here.
   } else { // We have no J16 data so use the I2C bus signals
     // Put code to switch Tx and Rx filters based on J16 data here.
-///*
+
     switch (_status.J16signals)
     {
       case 0: // Switch all filters to through path.
@@ -211,8 +224,8 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
         digitalWrite(LP160, LOW);
         digitalWrite(LP80, LOW);
     }
-//*/
   }
+*/  
 }
 
 /************************** I2C subroutines ***************************************************************/
