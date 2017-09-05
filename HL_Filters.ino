@@ -46,7 +46,7 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
       1 HP80    out   |       1 LP60_40 out   |       1 NC    in (pullup)
       2 HPthru  out   |       2 LP80    out   |       2 I1    in
       3 HP160   out   |       3 LP160   out   |       3 I2    in
-      4 LPthru  out   |       4 SDA     in    |       4 I3    in
+      4 LPthru  out   |       4 SDA     in    |       4 I3    in 
       5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
       6 I4      in    |       6 RESET   in    |       6 HP17  out
       7 Rptt    out   |       7 ???     in    |       7 HP30  out
@@ -65,11 +65,11 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
 // End of includes
 
 // I2C Globals and constants
-const byte MY_ADDRESS = 42;
-const byte OTHER_ADDRESS = 25;
+const uint8_t MY_ADDRESS = 42;
+const uint8_t OTHER_ADDRESS = lcdAddr;
 char I2C_sendBuf[32];
-char I2C_recBuf[32];
-long CMD = 0; //Commands received are placed in this variable
+uint8_t I2C_recBuf[32];
+uint8_t FILT = 0; //Commands received are placed in this variable
 
 boolean last_state = HIGH;
 
@@ -77,11 +77,11 @@ struct status {
   uint8_t J16signals;
   uint16_t txFilterNum;
   uint16_t rxFilterNum;
-  boolean TxRx_State; // true = Rx, false = Tx
+  boolean MOX_State; // true = Rx, false = Tx
 }
 _status;
 
-//status lastState;
+status lastState = _status;
 
 
 
@@ -91,13 +91,13 @@ const boolean TX = false;
 
 #if defined(FEATURE_I2C_LCD)
 // Set the pins on the I2C chip used for LCD connections:
-//                       addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
+//                       addr, en,rw,rs,d4,d5,d6,d7,bl,blpolthe same
 LiquidCrystal_I2C lcd(lcdAddr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
 #endif
 
 void setup() {
   // Setup the ports
-  DDRB = 0b10111111;  // bits 0..5 outputs, bit 6 input, bit 7 output.
+  DDRB = 0b10111111;  // bits 0..5 outputs, bit 6 input, bit 7 output.the same
   DDRC = 0b00001111;  // bits 0 .. 3 outputs, bits 4 .. 7 inputs.
   DDRD = 0b11100000;  // bits 0 .. 4 inputs, bits 5 .. 7 outputs.
   //Set up so 160M Hi pass and 10M Lo pass filters in circuit with filters in RX mode
@@ -109,7 +109,7 @@ void setup() {
   _status.J16signals = 0xFF; // Assume not connected initially
   _status.txFilterNum = LPthru;
   _status.rxFilterNum = HP160;
-  _status.TxRx_State = RX;
+  _status.MOX_State = RX;
     
 Wire.begin (MY_ADDRESS);
 Wire.onReceive (receiveEvent);
@@ -125,6 +125,14 @@ void loop() {
   lcd_DisplayStatus();
 #endif
 
+  // Poll the input pins for a filter change
+  _status.J16signals = ((PINB, mox) << 3);
+  _status.J16signals |= (((PIND, 4) << 2) + ((PIND, 3) << 1) + (PIND, 2));
+  
+  if((_status.txFilterNum != lastState.txFilterNum) | (_status.rxFilterNum != lastState.rxFilterNum) |
+    (_status.MOX_State != lastState.MOX_State)){
+    applyStatus();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -153,7 +161,7 @@ void lcd_DisplayStatus()
   lcd.print(_status.rxFilterNum); // Rx filters = 1 to 5.
   lcd.setCursor (0, 1);        // go to the next line (column, row)
   lcd.print(F("TR = "));
-  lcd.print(_status.TxRx_State); // T-R_State either "TX" or "RX"
+  lcd.print(_status.MOX_State); // T-R_State either "TX" or "RX"
   lcd.print(F(", Dat = "));
   lcd.print(_status.J16signals);
 }
@@ -166,7 +174,7 @@ void applyStatus()
   uint16_t pin;
   
   // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
-  if(_status.TxRx_State == RX) {
+  if(_status.MOX_State == RX) {
     PORTD &= ~(1 << Tptt);  // Clear Tx mode
     PORTB |= (1 << Rptt);   // Set to Rx mode
   } else {
@@ -230,44 +238,52 @@ PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
 
 /************************** I2C subroutines ***************************************************************/
 
-// The slave is listening for commands from the master. Some commands are
-// for the slave to perform a task like set a digital output and these are
-// dealt with in the main loop. Other commands are for information to be
-// sent back to the master and these are dealt with in requestEvent().
-// The receiveEvent captures the sent command in CMD for processing by the
-// main loop or the requestEvent() interrupt driven subroutine
+// The slave is listening for filter switching commands from the master. Embedded into the filter
+// values is the ptt state which is held in bit 7. Bits 0..6 contain the selected filter value.
+// The the filter value and ptt state is sent is sent for any band change, ptt action including a
+// CW key press or frequency excursion beyond the band edge
+// The receiveEvent captures the sent command in the filt variable and updates the _status struct
+// with ptt state and filter value, setting the changed flag if a change occurred.
 
 void receiveEvent(int howMany)
-// called by I2C interrupt service routine when incoming data arrives.
-// The command is sent as a numeric string and is converted to a long.
+// called by I2C interrupt service routine when any incoming data arrives.
+// The command is sent as a uint8_t
 {
-  char * pEnd;
+  uint8_t filt = Wire.read();
+  Serial.print("@Slave:receiveEvent(), FILT = ");
+  Serial.println(filt);
 
-  for (byte i = 0; i < howMany; i++)
-  {
-    I2C_recBuf[i] = Wire.read ();
-  }  // end of for loop
-  CMD = strtol(I2C_recBuf, &pEnd, 10);
-  Serial.print("@Slave:receiveEvent(), CMD = ");
-  Serial.println(CMD);
+  lastState = _status;
+  // Get the ptt state as we use this to decode the received FILT byte as a HPF or LPF value
+#if defined(FEATURE_Use_Hardware_Pin_for_MOX) 
+  // I4 (PORTB, 6) is used for MOX or the high order bit of I2C data
+  _status.MOX_State = PINB, mox;
+#else  
+  _status.MOX_State = (filt & 0b10000000); // High order bit = MOX
+#endif  
+  if(_status.MOX_State) { // We are receiving an Rx filter value
+    _status.rxFilterNum = (filt & 0b00000111);
+  } else { // We are receiving a Tx filter value
+    _status.txFilterNum = ((filt & 0b01110000) >> 4);
+  }
 }
 
 void requestEvent()
 // This is called if the master has asked the slave for information. The
 // command to identify which info has been received by receiveEvent and
-// placed into the global "CMD" variable.
+// placed into the global "FILT" variable.
 {
-  //  Serial.print("@Slave:requestEvent(), CMD = ");
-  //  Serial.println(CMD, 10);
-  switch (CMD)
+  //  Serial.print("@Slave:requestEvent(), FILT = ");
+  //  Serial.println(FILT, 10);
+  switch (FILT)
   {
-//    case CMD_READ_A0: sendSensor(A0, _volts); break;  // send A0 value
-//    case CMD_READ_A1: sendSensor(A1, _amps); break;  // send A1 value
-//    case CMD_READ_A2: sendSensor(A2, _analog2); break;  // send A2 value
-//    case CMD_READ_D2: Wire.write(digitalRead(2)); break;   // send D2 value
-//    case CMD_READ_D3: Wire.write(digitalRead(3)); break;   // send D3 value
-//    case CMD_STATUS: sendStatus();
-//    case CMD_ID: {
+//    case FILT_READ_A0: sendSensor(A0, _volts); break;  // send A0 value
+//    case FILT_READ_A1: sendSensor(A1, _amps); break;  // send A1 value
+//    case FILT_READ_A2: sendSensor(A2, _analog2); break;  // send A2 value
+//    case FILT_READ_D2: Wire.write(digitalRead(2)); break;   // send D2 value
+//    case FILT_READ_D3: Wire.write(digitalRead(3)); break;   // send D3 value
+//    case FILT_STATUS: sendStatus();
+//    case FILT_ID: {
 //        memset(I2C_sendBuf, '\0', 32); // Clear the I2C Send Buffer
 //        strcpy(I2C_sendBuf, "Slave address = 9");
     /*
@@ -283,7 +299,7 @@ void requestEvent()
 //        break;   // send our ID
 //      }
   }  // end of switch
-  CMD = 0;
+  FILT = 0;
 }
 
 void sendSensor (const byte which, uint8_t cmd)

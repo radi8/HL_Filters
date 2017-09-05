@@ -2,6 +2,7 @@
 
 //#define FEATURE_HL1               // HL1 uses data lines for filter switching
 //#define FEATURE_HL2               // HL2 uses I2C for filter switching
+#define FEATURE_Use_Hardware_Pin_for_MOX
 #define FEATURE_Quisk
 //#define FEATURE_pihpsdr
 //#define FEATURE_Custom_Filter
@@ -71,7 +72,7 @@ const uint8_t HP17    = 6;  // Pin 10 (PD6) set = 17 up selected
 // but ever both at once for either off or on states.
 const uint8_t Tptt  = 5;  // Pin 9 (PD5) Set connects the Tx path from PA out to Antenna
 const uint8_t Rptt  = 8;  // Pin 8 (PB7) Set connects the Rx path from Antenna to Rx in via the Tx relay path
-
+const uint8_t mox   = 6;  // Pin 6 (PB6) Receives the MOX value from HL. HIGH = Rx LOW = Tx
 
 // Here we build the map of what filters will be selected from the word formed
 // by the bits on USER0,1,2,3 inputs. If 2 filters need to be set, they should
