@@ -42,11 +42,11 @@
                   http://busyducks.com/ascii-art-arduinos
 
 
-PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
+  PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
       1 HP80    out   |       1 LP60_40 out   |       1 NC    in (pullup)
       2 HPthru  out   |       2 LP80    out   |       2 I1    in
       3 HP160   out   |       3 LP160   out   |       3 I2    in
-      4 LPthru  out   |       4 SDA     in    |       4 I3    in 
+      4 LPthru  out   |       4 SDA     in    |       4 I3    in
       5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
       6 I4      in    |       6 RESET   in    |       6 HP17  out
       7 Rptt    out   |       7 ???     in    |       7 HP30  out
@@ -110,9 +110,9 @@ void setup() {
   _status.txFilterNum = LPthru;
   _status.rxFilterNum = HP160;
   _status.MOX_State = RX;
-    
-Wire.begin (MY_ADDRESS);
-Wire.onReceive (receiveEvent);
+
+  Wire.begin (MY_ADDRESS);
+  Wire.onReceive (receiveEvent);
 #if defined(FEATURE_I2C_LCD) // Setup the display if enabled
   lcd.begin(lcdNumRows, lcdNumCols);
   lcd_PrintSplash();
@@ -125,12 +125,60 @@ void loop() {
   lcd_DisplayStatus();
 #endif
 
-  // Poll the input pins for a filter change
+  // Poll the input pins for a filter or ptt change
   _status.J16signals = ((PINB, mox) << 3);
   _status.J16signals |= (((PIND, 4) << 2) + ((PIND, 3) << 1) + (PIND, 2));
-  
-  if((_status.txFilterNum != lastState.txFilterNum) | (_status.rxFilterNum != lastState.rxFilterNum) |
-    (_status.MOX_State != lastState.MOX_State)){
+
+  // Special case when J16 = 0xFF (nothing connected, so all pins pulled high)
+  // or J16 = 0x00 (no filter selected so use default).
+  if (_status.J16signals != 0xFF) { // Only process input pins if something is connected
+    if (_status.J16signals == 0x00) { // Switch to default filter case
+      _status.txFilterNum = LPthru;
+      _status.rxFilterNum = HP160;
+      _status.MOX_State = ((_status.J16signals & 0b00001000) >> 3);
+    } else { // Calculate which filters to connect
+      switch (_status.J16signals & 0b00000111)
+      {
+        case 1: // 160 Metre band.
+          clearFilters();
+          digitalWrite(LP160, HIGH);
+          digitalWrite(HP160, HIGH);                    
+          break;
+        case 2: // 80 Metre band.
+          clearFilters();
+          digitalWrite(LP80, HIGH);
+          digitalWrite(HP80, HIGH);
+          break;
+        case 3: // 60/30 Metre band.
+          clearFilters();
+          digitalWrite(LP60_40, HIGH);
+          digitalWrite(HP40, HIGH);        
+          break;
+        case 4: // 30/20 Metre band.
+          clearFilters();
+          digitalWrite(LP30_20, HIGH);
+          digitalWrite(HP30, HIGH);
+          break;
+        case 5: // 18/15 Metre band.
+          clearFilters();
+          digitalWrite(LP17_15, HIGH);
+          digitalWrite(HP17, HIGH);
+          break;
+        case 6: // 12/10 Metre band.
+          clearFilters();
+          // LP 30 MHz has been set in clearFilters() subroutine
+          digitalWrite(HP17, HIGH);
+          break;
+        default:
+          // Turn all the filters off
+          digitalWrite(LP160, LOW);
+          digitalWrite(LP80, LOW);
+      }
+    }
+  }
+
+  if ((_status.txFilterNum != lastState.txFilterNum) | (_status.rxFilterNum != lastState.rxFilterNum) |
+      (_status.MOX_State != lastState.MOX_State)) {
     applyStatus();
   }
 }
@@ -172,70 +220,46 @@ void applyStatus()
 {
   uint16_t *port;
   uint16_t pin;
-  
+
   // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
-  if(_status.MOX_State == RX) {
+  if (_status.MOX_State == RX) {
     PORTD &= ~(1 << Tptt);  // Clear Tx mode
     PORTB |= (1 << Rptt);   // Set to Rx mode
   } else {
     PORTB &= ~(1 << Rptt);  // Clear Rx mode
     PORTD |= (1 << Tptt);   // Set to Tptt mode
   }
-/*
-PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
-      1 HP80    out   |       1 LP60_40 out   |       1 NC    in (pullup)
-      2 HPthru  out   |       2 LP80    out   |       2 I1    in
-      3 HP160   out   |       3 LP160   out   |       3 I2    in
-      4 LPthru  out   |       4 SDA     in    |       4 I3    in
-      5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
-      6 I4      in    |       6 RESET   in    |       6 HP17  out
-      7 Rptt    out   |       7 ???     in    |       7 HP30  out
-*/      
-  // Now clear all the HP and LP filters except leave the LPthru filter connected
-  PORTB |= (1 << PB4); // Set the LPthru filter
-  PORTB &= 0b11010000; // PORTB 5, 3..0 = LP17_15, HP160, HPthru, HP80, HP40 cleared
-  PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
-  PORTD &= 0b00111111; // PORTC 7,6 = HP30, HP17 cleared
+  /*
+    PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
+        1 HP80    out   |       1 LP60_40 out   |       1 NC    in (pullup)
+        2 HPthru  out   |       2 LP80    out   |       2 I1    in
+        3 HP160   out   |       3 LP160   out   |       3 I2    in
+        4 LPthru  out   |       4 SDA     in    |       4 I3    in
+        5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
+        6 I4      in    |       6 RESET   in    |       6 HP17  out
+        7 Rptt    out   |       7 ???     in    |       7 HP30  out
+  */
+  clearFilters();
 
-  // Turn on the new TX filter  
+  // Turn on the new TX filter
   *port = (_status.txFilterNum & 0x00FF);
   pin = (_status.txFilterNum >> 8);
   *port |= (1 << pin);
-  
+
   // Turn on the new RX filter
   *port = (_status.rxFilterNum & 0x00FF);
   pin = (_status.rxFilterNum >> 8);
   *port |= (1 << pin);
-  
-/*  
-  // Switch the Transmit and Receive filters
-  if (_status.J16signals == 0xff) { // If J16 signals = 0xff then all pullups are active due to no signals
-    // Put code to switch Tx and Rx filters based on I2C data here.
-  } else { // We have no J16 data so use the I2C bus signals
-    // Put code to switch Tx and Rx filters based on J16 data here.
-
-    switch (_status.J16signals)
-    {
-      case 0: // Switch all filters to through path.
-      
-      break;
-      case 1:
-        
-        
-        digitalWrite(LP160, HIGH);
-        break;
-      case 2:
-        digitalWrite(LP80, HIGH);
-        break;
-      default:
-        // Turn all the filters off
-        digitalWrite(LP160, LOW);
-        digitalWrite(LP80, LOW);
-    }
-  }
-*/  
 }
 
+void clearFilters()
+{
+  // Clear all the HP and LP filters except leave the LPthru filter connected
+  PORTB |= (1 << PB4); // Set the LPthru filter
+  PORTB &= 0b11010000; // PORTB 5, 3..0 = LP17_15, HP160, HPthru, HP80, HP40 cleared
+  PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
+  PORTD &= 0b00111111; // PORTC 7,6 = HP30, HP17 cleared
+}
 /************************** I2C subroutines ***************************************************************/
 
 // The slave is listening for filter switching commands from the master. Embedded into the filter
@@ -255,13 +279,13 @@ void receiveEvent(int howMany)
 
   lastState = _status;
   // Get the ptt state as we use this to decode the received FILT byte as a HPF or LPF value
-#if defined(FEATURE_Use_Hardware_Pin_for_MOX) 
+#if defined(FEATURE_Use_Hardware_Pin_for_MOX)
   // I4 (PORTB, 6) is used for MOX or the high order bit of I2C data
   _status.MOX_State = PINB, mox;
-#else  
+#else
   _status.MOX_State = (filt & 0b10000000); // High order bit = MOX
-#endif  
-  if(_status.MOX_State) { // We are receiving an Rx filter value
+#endif
+  if (_status.MOX_State) { // We are receiving an Rx filter value
     _status.rxFilterNum = (filt & 0b00000111);
   } else { // We are receiving a Tx filter value
     _status.txFilterNum = ((filt & 0b01110000) >> 4);
@@ -277,27 +301,27 @@ void requestEvent()
   //  Serial.println(FILT, 10);
   switch (FILT)
   {
-//    case FILT_READ_A0: sendSensor(A0, _volts); break;  // send A0 value
-//    case FILT_READ_A1: sendSensor(A1, _amps); break;  // send A1 value
-//    case FILT_READ_A2: sendSensor(A2, _analog2); break;  // send A2 value
-//    case FILT_READ_D2: Wire.write(digitalRead(2)); break;   // send D2 value
-//    case FILT_READ_D3: Wire.write(digitalRead(3)); break;   // send D3 value
-//    case FILT_STATUS: sendStatus();
-//    case FILT_ID: {
-//        memset(I2C_sendBuf, '\0', 32); // Clear the I2C Send Buffer
-//        strcpy(I2C_sendBuf, "Slave address = 9");
-    /*
-        int len = strlen(I2C_sendBuf);
-        I2C_sendBuf[len] = '\0';
-        for (byte i = 0; i <= len; i++) {
-          Wire.write(I2C_sendBuf[i]); // Chug out 1 character at a time
-        }  // end of for loop
-        /*    Wire.write(I2C_sendBuf);
-              Serial.print("@Slave:requestEvent(), Response sent = ");
-              Serial.println(I2C_sendBuf); */
-//          Wire.write(I2C_sendBuf);
-//        break;   // send our ID
-//      }
+      //    case FILT_READ_A0: sendSensor(A0, _volts); break;  // send A0 value
+      //    case FILT_READ_A1: sendSensor(A1, _amps); break;  // send A1 value
+      //    case FILT_READ_A2: sendSensor(A2, _analog2); break;  // send A2 value
+      //    case FILT_READ_D2: Wire.write(digitalRead(2)); break;   // send D2 value
+      //    case FILT_READ_D3: Wire.write(digitalRead(3)); break;   // send D3 value
+      //    case FILT_STATUS: sendStatus();
+      //    case FILT_ID: {
+      //        memset(I2C_sendBuf, '\0', 32); // Clear the I2C Send Buffer
+      //        strcpy(I2C_sendBuf, "Slave address = 9");
+      /*
+          int len = strlen(I2C_sendBuf);
+          I2C_sendBuf[len] = '\0';
+          for (byte i = 0; i <= len; i++) {
+            Wire.write(I2C_sendBuf[i]); // Chug out 1 character at a time
+          }  // end of for loop
+          /*    Wire.write(I2C_sendBuf);
+                Serial.print("@Slave:requestEvent(), Response sent = ");
+                Serial.println(I2C_sendBuf); */
+      //          Wire.write(I2C_sendBuf);
+      //        break;   // send our ID
+      //      }
   }  // end of switch
   FILT = 0;
 }
@@ -306,21 +330,21 @@ void sendSensor (const byte which, uint8_t cmd)
 // The integer value of the analog port is converted to a string and sent.
 {
   int val = analogRead (which);
-//  uint8_t len;
+  //  uint8_t len;
 
   memset(I2C_sendBuf, '\0', 32); // Clear the I2C Send Buffer
   sprintf(I2C_sendBuf, "%d %d", cmd, val);
-//  len = strlen(I2C_sendBuf);
-/*  
-  I2C_sendBuf[len] = '\0';
-  for (byte i = 0; i <= len; i++)
-  {
-    Wire.write(I2C_sendBuf[i]); // Chug out one char at a time.
-  }  // end of for loop
+  //  len = strlen(I2C_sendBuf);
+  /*
+    I2C_sendBuf[len] = '\0';
+    for (byte i = 0; i <= len; i++)
+    {
+      Wire.write(I2C_sendBuf[i]); // Chug out one char at a time.
+    }  // end of for loop
 
-*/
+  */
   Wire.write(I2C_sendBuf);
-//  Serial.println(I2C_sendBuf); // debug
+  //  Serial.println(I2C_sendBuf); // debug
 }  // end of sendSensor
 
 /**********************************************************************************************************/
