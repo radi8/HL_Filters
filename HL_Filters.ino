@@ -201,15 +201,20 @@ void lcd_PrintSplash()
 #if defined(FEATURE_I2C_LCD)
 void lcd_DisplayStatus()
 {
+  // Print the _status struct on a 2 line 16 column display
   lcd.home();
-  //lcd.print(F("0123456789012345")); I am using this for display template
+  //lcd.print(F("0123456789012345")); I am using this for display layout template
   lcd.print(F("HP = "));
   lcd.print(_status.txFilterNum); // Tx filters = 1 to 6.
   lcd.print(F(" & LP = "));
   lcd.print(_status.rxFilterNum); // Rx filters = 1 to 5.
   lcd.setCursor (0, 1);        // go to the next line (column, row)
   lcd.print(F("TR = "));
-  lcd.print(_status.MOX_State); // T-R_State either "TX" or "RX"
+  if(_status.MOX_State){
+    lcd.print("Rx"); // T-R_State true = "Rx"
+  } else {
+    lcd.print("Tx"); // T-R_State false = "Tx"
+  }
   lcd.print(F(", Dat = "));
   lcd.print(_status.J16signals);
 }
@@ -229,16 +234,7 @@ void applyStatus()
     PORTB &= ~(1 << Rptt);  // Clear Rx mode
     PORTD |= (1 << Tptt);   // Set to Tptt mode
   }
-  /*
-    PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (pullup)
-        1 HP80    out   |       1 LP60_40 out   |       1 NC    in (pullup)
-        2 HPthru  out   |       2 LP80    out   |       2 I1    in
-        3 HP160   out   |       3 LP160   out   |       3 I2    in
-        4 LPthru  out   |       4 SDA     in    |       4 I3    in
-        5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
-        6 I4      in    |       6 RESET   in    |       6 HP17  out
-        7 Rptt    out   |       7 ???     in    |       7 HP30  out
-  */
+
   clearFilters();
 
   // Turn on the new TX filter
