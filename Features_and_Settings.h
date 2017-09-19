@@ -32,15 +32,15 @@
 
 // The port and pin for each filter are defined as a 16 bit number with the HIGH 8 bits holding the port
 // and the LOW 8 bits holding the pin. they are retrieved by "PORT = v >> 8, PIN = v & 0xFF"
-// The Hi pass receive only filters
+// The Hi pass receive filters
 const uint16_t HPthru  = (PB2 << 8) + &PORTB; // Pin 14 (PB2) set = Through pass selected, no filters in circuit
-const uint16_t HP160   = (PB3 << 8) + &PORTB; // Pin 15 (PB3) set = 17 up selected
-const uint16_t HP80    = (PB1 << 8) + &PORTB; // Pin 13 (PB1) set = 17 up selected
-const uint16_t HP40    = (PB0 << 8) + &PORTB; // Pin 12 (PB0) set = 17 up selected
-const uint16_t HP30    = (PD7 << 8) + &PORTD; // Pin 11 (PD7) set = 17 up selected
+const uint16_t HP160   = (PB3 << 8) + &PORTB; // Pin 15 (PB3) set = 160 up selected
+const uint16_t HP80    = (PB1 << 8) + &PORTB; // Pin 13 (PB1) set = 80 up selected
+const uint16_t HP40    = (PB0 << 8) + &PORTB; // Pin 12 (PB0) set = 40 up selected
+const uint16_t HP30    = (PD7 << 8) + &PORTD; // Pin 11 (PD7) set = 30 up selected
 const uint16_t HP17    = (PD6 << 8) + &PORTD; // Pin 10 (PD6) set = 17 up selected
 
-// The Lo pass Transmit and receive filters
+// The Lo pass Transmit filters (The 12/10 filter is always in circuit and not switched)
 const uint16_t LP160   = (PC3 << 8) + &PORTC;  // pin 26 set = 160M filter selected. Clear = filter not selected
 const uint16_t LP80    = (PC2 << 8) + &PORTC;  // pin 25 set = 80M filter selected. Clear = filter not selected
 const uint16_t LP60_40 = (PC1 << 8) + &PORTC;  // pin 24 set = 60/40M filter selected. Clear = filter not selected

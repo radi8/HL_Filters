@@ -52,7 +52,9 @@
       7 Rptt    out   |       7 ???     in    |       7 HP30  out
 */
 
-////////////////////////////////const uint16_t LP12_10 = (PORTC << 8) + PC3;  // All Band bits clear = 10M filter in circuit and all other filters out.//////////////////////////////////////////////////////////////////////////////
+const uint16_t LP12_10 = (PORTC << 8) + PC3;  // All Band bits clear = 10M filter in circuit and all other filters out.
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main code starts here
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -201,22 +203,48 @@ void lcd_PrintSplash()
 #if defined(FEATURE_I2C_LCD)
 void lcd_DisplayStatus()
 {
+  uint16_t *port;
+  uint16_t pin;
+  
   // Print the _status struct on a 2 line 16 column display
   lcd.home();
   //lcd.print(F("0123456789012345")); I am using this for display layout template
+  //lcd.print(F("HP = B5: LP = D6"));
+  
+// Print the port and pin for the TX filters  
   lcd.print(F("HP = "));
-  lcd.print(_status.txFilterNum); // Tx filters = 1 to 6.
-  lcd.print(F(" & LP = "));
-  lcd.print(_status.rxFilterNum); // Rx filters = 1 to 5.
+  *port = (_status.txFilterNum & 0x00FF);
+  pin = (_status.txFilterNum >> 8); // Shift hi order 8 bits to lo order position and drop lo order
+  if(*port == PORTB){
+    lcd.print("B");
+  } else {
+    lcd.print("C");
+  }
+  lcd.print(pin);
+  
+// Print the port and pin for the RX filters
+  *port = (_status.rxFilterNum & 0x00FF);
+  pin = (_status.rxFilterNum >> 8); // Shift hi order 8 bits to lo order position and drop lo order
+  lcd.print(F(": LP = "));
+  if(*port == PORTB){
+    lcd.print("B");
+  } else {
+    lcd.print("D");
+  }
+  lcd.print(pin);
+
+// Print the ptt state and the J16 pins value as Hex. (Need to decode manually)
   lcd.setCursor (0, 1);        // go to the next line (column, row)
+// 0123456789012345
+// TR=Rx:J16=0xFF
   lcd.print(F("TR = "));
   if(_status.MOX_State){
     lcd.print("Rx"); // T-R_State true = "Rx"
   } else {
     lcd.print("Tx"); // T-R_State false = "Tx"
   }
-  lcd.print(F(", Dat = "));
-  lcd.print(_status.J16signals);
+  lcd.print(F(":J16="));
+  lcd.print(_status.J16signals, HEX);
 }
 #endif
 
@@ -259,24 +287,24 @@ void clearFilters()
 /************************** I2C subroutines ***************************************************************/
 
 // The slave is listening for filter switching commands from the master. Embedded into the filter
-// values is the ptt state which is held in bit 7. Bits 0..6 contain the selected filter value.
-// The the filter value and ptt state is sent is sent for any band change, ptt action including a
-// CW key press or frequency excursion beyond the band edge
+// values is the ptt state which is held in bit 7. Bits 6..4 contain the selected Tx filter value.
+// Bit 4 is for use and bits 3..0 hold the Rx filter value. For any change of state e.g band change,
+// ptt action including a CW key press or frequency excursion beyond the band edge this 8 bit value
+// is sent. It is the only data sent from Hermes-Lite so any received will be a valid ptt or filter.
+
 // The receiveEvent captures the sent command in the filt variable and updates the _status struct
-// with ptt state and filter value, setting the changed flag if a change occurred.
+// with ptt state, Tx filter value and Rx filter value.
 
 void receiveEvent(int howMany)
 // called by I2C interrupt service routine when any incoming data arrives.
 // The command is sent as a uint8_t
 {
   uint8_t filt = Wire.read();
-  Serial.print("@Slave:receiveEvent(), FILT = ");
-  Serial.println(filt);
 
   lastState = _status;
   // Get the ptt state as we use this to decode the received FILT byte as a HPF or LPF value
 #if defined(FEATURE_Use_Hardware_Pin_for_MOX)
-  // I4 (PORTB, 6) is used for MOX or the high order bit of I2C data
+  // I4 (PORTB, 6) can be used for MOX or else the high order bit of I2C data
   _status.MOX_State = PINB, mox;
 #else
   _status.MOX_State = (filt & 0b10000000); // High order bit = MOX
@@ -286,6 +314,13 @@ void receiveEvent(int howMany)
   } else { // We are receiving a Tx filter value
     _status.txFilterNum = ((filt & 0b01110000) >> 4);
   }
+#if defined(DEBUG_SHOW_FILTER_SWITCH_SIGNALS)
+  lcd.home();
+  lcd.print("@receiveEvent()");
+  lcd.setCursor (0, 1);
+  lcd.print("filt = ");
+  lcd.print(filt);
+#endif  
 }
 
 void requestEvent()
