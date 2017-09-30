@@ -339,12 +339,10 @@ void lcd_DisplayStatus()
 /**********************************************************************************************************/
 void applyStatus()
 {
-  uint8_t *port;
   uint8_t pin;
 
-Serial.println("Got to applyStatus()");
   // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
-  if (_status.MOX_State == RX) {
+  if(_status.MOX_State == RX) {
     PORTD &= ~(1 << Tptt);  // Clear Tx mode
 #ifndef DEBUG_ARDUINO_MODE  // Don't change this in Arduino mode as it is the oscillator pin
     PORTB |= (1 << Rptt);   // Set to Rx mode
@@ -359,28 +357,16 @@ Serial.println("Got to applyStatus()");
   clearFilters();
 
   // Turn on the new TX filter
-  *port = (_status.txFilterNum & 0x00FF);
   pin = (_status.txFilterNum >> 8);
 
-  if(*port == &PORTB) {
-    PORTB |= (1 << pin);
-  } else if(*port == &PORTC) {
-    PORTC |= (1 << pin);
-  } else {
-    PORTD |= (1 << pin);
-  }
-   
+  #define T_PORT (* (volatile unsigned char *) (_status.txFilterNum & 0x00FF))
+  T_PORT |= (1 << pin);
+
   // Turn on the new RX filter
-  *port = (_status.rxFilterNum & 0x00FF);
-  pin = (_status.rxFilterNum >> 8);
-  if(*port == &PORTB) {
-    PORTB |= (1 << pin);
-  } else if(*port == &PORTC) {
-    PORTC |= (1 << pin);
-  } else {
-    PORTD |= (1 << pin);
-  }
-  
+  pin = (_status.rxFilterNum >> 8);  
+  #define R_PORT (* (volatile unsigned char *) (_status.rxFilterNum & 0x00FF))
+  R_PORT |= (1 << pin);
+
   lastState = _status; 
 }
 
