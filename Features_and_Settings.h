@@ -6,19 +6,25 @@
 #define FEATURE_Quisk
 //#define FEATURE_pihpsdr
 //#define FEATURE_Custom_Filter
-#define FEATURE_I2C_LCD
+//#define FEATURE_I2C_LCD
+#define FEATURE_SERIAL_PRINT
 #define FEATURE_Invert_Inputs     // Allows inverting or non-inverting buffers from HL to Arduino
 #define FEATURE_Invert_ptt_line   // Use for open collector driver where ptt tx is low active
 
 // Debug Defines follow here
 #define DEBUG_ENABLED            // Must enable this if any debug at all is enabled
+
+// The software can be tested on an Arduino if the commands which affect oscillator pins are ignored
+// Rptt = Pin 8 (PB7) and I4   = Pin7 (PB6) go to the crystal and not available on the Arduino board
+// As is D0 and D1 which are the serial inputs used for bootloading and serial monitoring
+#define DEBUG_ARDUINO_MODE
 #define DEBUG_BAND_CHANGE        // Check the values arriving on User0 to User3
 #define DEBUG_PTT_CHANGE
-#define DEBUG_SHOW_FILTER_SWITCH_SIGNALS
+//#define DEBUG_SHOW_FILTER_SWITCH_SIGNALS
 
 #if defined  DEBUG_ENABLED
   #ifndef FEATURE_I2C_LCD
-    #define FEATURE_I2C_LCD
+//    #define FEATURE_I2C_LCD
   #endif
 #endif
 
@@ -30,8 +36,8 @@
 #endif
 
 
-// The port and pin for each filter are defined as a 16 bit number with the HIGH 8 bits holding the port
-// and the LOW 8 bits holding the pin. they are retrieved by "PORT = v >> 8, PIN = v & 0xFF"
+// The port and pin for each filter are defined as a 16 bit number with the HIGH 8 bits holding the port's pin
+// and the LOW 8 bits holding the PORT. they are retrieved by "PIN = v >> 8, and PORT address = v & 0xFF"
 // The Hi pass receive filters
 const uint16_t HPthru  = (PB2 << 8) + &PORTB; // Pin 14 (PB2) set = Through pass selected, no filters in circuit
 const uint16_t HP160   = (PB3 << 8) + &PORTB; // Pin 15 (PB3) set = 160 up selected
@@ -71,7 +77,7 @@ const uint8_t HP17    = 6;  // Pin 10 (PD6) set = 17 up selected
 // The following defines the pins for the TX and RX path switches. Note either one or the other is set
 // but ever both at once for either off or on states.
 const uint8_t Tptt  = 5;  // Pin 9 (PD5) Set connects the Tx path from PA out to Antenna
-const uint8_t Rptt  = 8;  // Pin 8 (PB7) Set connects the Rx path from Antenna to Rx in via the Tx relay path
+const uint8_t Rptt  = 7;  // Pin 8 (PB7) Set connects the Rx path from Antenna to Rx in via the Tx relay path
 const uint8_t mox   = 6;  // Pin 6 (PB6) Receives the MOX value from HL. HIGH = Rx LOW = Tx
 
 // Here we build the map of what filters will be selected from the word formed
