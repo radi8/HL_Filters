@@ -36,7 +36,15 @@
                   |          MISO SCK RST         |
                   | NANO-V3                       |
                   +-------------------------------+
-
+#ifdef DEBUG_ARDUINO_MODE#ifdef DEBUG_ARDUINO_MODE
+  
+#else
+  
+#endif
+  
+#else
+  
+#endif
   Rptt = Pin 8 (PB7) Wires to the crystal in an Arduino and N/A. Using it as a data line in this cct.
   I4   = Pin7 (PB6) Crystal input N/A on Arduino. (Input with pullups) on J6 connector
                   http://busyducks.com/ascii-art-arduinos
@@ -86,8 +94,7 @@ struct status {
   uint16_t txFilterNum;
   uint16_t rxFilterNum;
   boolean MOX_State; // true = Rx, false = Tx
-}
-_status;
+} _status;
 
 status lastState = _status;
 
@@ -107,26 +114,24 @@ void setup() {
   // Setup the port directions
 #ifdef DEBUG_ARDUINO_MODE // We lose D0 and D1 plus B6 and B7 in Arduino mode
   DDRB = DDRB | B00111111; // Don't change its 6,7 as these are oscillator
+  DDRD = DDRD | B11100000; // Don't change bits 0, 1 as these are serial pins. Set bits 7..5
+  DDRD = DDRD & B11100011; // Make sure bits 4..2 are inputs (D2, D3, D4 on Arduino)
 #else
-  DDRB = 0b10111111;  // bits 0..5 outputs, bit 6 input, bit 7 output.the same
-#endif
-  DDRC = 0b00001111;  // bits 0 .. 3 outputs, bits 4 .. 7 inputs.
-#ifdef DEBUG_ARDUINO_MODE
-  DDRD = DDRD | B11111100; // Don't change bits 0, 1 as these are serial pins
-  DDRD = DDRD & B11100011;
-#else
+  DDRB = 0b10111111;  // bits 0..5 outputs, bit 6 input, bit 7 output.
   DDRD = 0b11100000;  // bits 0 .. 4 inputs, bits 5 .. 7 outputs.
 #endif
+  DDRC = 0b00001111;  // bits 0 .. 3 outputs, bits 4 .. 7 inputs.
 
   //Set up port states for outputs and pullups for inputs
 #ifdef DEBUG_ARDUINO_MODE
   PORTB = PORTB & 0b11000000; // Clear everything except oscillator settings
   PORTB = PORTB | 0b00011000; // Turn on HP160 and LPthru filters
+  PORTD |= 0b00011100; // Pullups for inputs PD2..4
 #else
   PORTB = 0b11011000; // Pullup on PB6 with PB7, 3, 2 outputs Hi sets Rx mode with HP160 and LPthru
+  PORTD = 0b00011111; // Pullups for inputs PD0..4
 #endif
   PORTC = 0b10110000; // SCL & SDA Pullups
-  PORTD = 0b00011111; // Pullups for inputs PD0..4
 
   // Set the board's initial Status to match port settings
   _status.J16signals = 0x07; // Assume not connected initially
@@ -137,6 +142,8 @@ void setup() {
 #else
   _status.MOX_State = RX; // true = Rx, false = Tx
 #endif
+
+  // Setup the I2C
   Wire.begin (MY_ADDRESS);
   Wire.onReceive (receiveEvent);
 #if defined(FEATURE_I2C_LCD) // Setup the display if enabled
@@ -153,7 +160,7 @@ void setup() {
   PrintSplash();
 #endif
   lastState = _status;
-  clearFilters();
+  applyStatus(); // Set filters to initial state in case the board is not connected to a radio.
 }
 
 void loop() {
@@ -166,10 +173,10 @@ void loop() {
 #ifndef DEBUG_ARDUINO_MODE  // This is an oscillator pin in Arduino mode so don't read
   _status.MOX_State = (PINB & (1 << mox));
 #endif
-  _status.J16signals = 0;
+  _status.J16signals = 0; //TODO check if this is an overkill and remove if so
   _status.J16signals = ((PIND & 0b00011100) >> 2);
 
-  // Special case when J16 = 0xFF (nothing connected, so all pins pulled high)
+  // Special case when J16 = 0x07 (nothing connected, so all pins pulled high)
   // or J16 = 0x00 (no filter selected so use default).
   if (_status.J16signals != lastState.J16signals) { // Only process input pins if something changed
     Serial.print(F("Changed input = ")); Serial.println(_status.J16signals, BIN);
@@ -196,15 +203,18 @@ void loop() {
         _status.rxFilterNum = HP17;
         break;
       case 6: // 12/10 Metre band.
-        // LP 30 MHz will be set in clearFilters() subroutine
+        _status.txFilterNum = LPthru;
         _status.rxFilterNum = HP17;
         break;
+      case 7: // Roof and Floor filters.
+        _status.txFilterNum = LPthru;
+        _status.rxFilterNum = HP160;
+        break;        
       default:
         _status.txFilterNum = LPthru;
         _status.rxFilterNum = HPthru;
     }
-    applyStatus();
-    PrintSplash();
+    Serial.println(F("Processed a filter change"));
   }
 
 #ifndef DEBUG_ARDUINO_MODE
@@ -215,10 +225,9 @@ void loop() {
     PrintSplash();
 #endif
   }
-
-
 #else
   if ((_status.txFilterNum != lastState.txFilterNum) | (_status.rxFilterNum != lastState.rxFilterNum)) {
+    Serial.println(F("and called applyStatus()"));
     applyStatus();
 #ifdef FEATURE_SERIAL_PRINT
     PrintSplash();
@@ -245,8 +254,8 @@ void lcd_PrintSplash()
 #ifdef FEATURE_SERIAL_PRINT
 void PrintSplash()
 {
-  uint16_t *port;
-  uint16_t pin;
+  uint8_t *port;
+  uint8_t pin;
 
   Serial.println(F("Hermes-Lite Smart Filter v1.0.0"));
   Serial.print(F("_status.J16signals  = ")); Serial.println(_status.J16signals, BIN);
@@ -255,7 +264,7 @@ void PrintSplash()
   Serial.print(F("_status.MOX_State   = ")); Serial.println(_status.MOX_State);
 
   // Print the port and pin for the TX filters
-  Serial.print(F("HP Filter = "));
+  Serial.print(F("LP Filter = "));
   *port = (_status.txFilterNum & 0x00FF);
   pin = (_status.txFilterNum >> 8); // Shift hi order 8 bits to lo order position and drop lo order
   if (*port == &PORTB) {
@@ -268,7 +277,7 @@ void PrintSplash()
   // Print the port and pin for the RX filters
   *port = (_status.rxFilterNum & 0x00FF);
   pin = (_status.rxFilterNum >> 8); // Shift hi order 8 bits to lo order position and drop lo order
-  Serial.print(F("LP Filter = "));
+  Serial.print(F("HP Filter = "));
   if (*port == &PORTB) {
     Serial.print(F("PORTB, "));
   } else {
@@ -282,8 +291,8 @@ void PrintSplash()
 #if defined(FEATURE_I2C_LCD)
 void lcd_DisplayStatus()
 {
-  uint16_t *port;
-  uint16_t pin;
+  uint8_t *port;
+  uint8_t pin;
 
   // Print the _status struct on a 2 line 16 column display
   lcd.home();
@@ -330,9 +339,10 @@ void lcd_DisplayStatus()
 /**********************************************************************************************************/
 void applyStatus()
 {
-  uint16_t *port;
-  uint16_t pin;
+  uint8_t *port;
+  uint8_t pin;
 
+Serial.println("Got to applyStatus()");
   // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
   if (_status.MOX_State == RX) {
     PORTD &= ~(1 << Tptt);  // Clear Tx mode
@@ -351,23 +361,39 @@ void applyStatus()
   // Turn on the new TX filter
   *port = (_status.txFilterNum & 0x00FF);
   pin = (_status.txFilterNum >> 8);
-  *port |= (1 << pin);
 
+  if(*port == &PORTB) {
+    PORTB |= (1 << pin);
+  } else if(*port == &PORTC) {
+    PORTC |= (1 << pin);
+  } else {
+    PORTD |= (1 << pin);
+  }
+   
   // Turn on the new RX filter
   *port = (_status.rxFilterNum & 0x00FF);
   pin = (_status.rxFilterNum >> 8);
-  *port |= (1 << pin);
-  lastState = _status;
+  if(*port == &PORTB) {
+    PORTB |= (1 << pin);
+  } else if(*port == &PORTC) {
+    PORTC |= (1 << pin);
+  } else {
+    PORTD |= (1 << pin);
+  }
+  
+  lastState = _status; 
 }
 
+/**********************************************************************************************************/
 void clearFilters() // Does not change PORTB 6,7 (osc) or PORTD 0,1 (serial)
 {
   // Clear all the HP and LP filters except leave the LPthru filter connected
-  PORTB |= (1 << PB4); // Set the LPthru filter
-  PORTB &= 0b11010000; // PORTB 5, 3..0 = LP17_15, HP160, HPthru, HP80, HP40 cleared
+//  PORTB |= (1 << PB4); // Set the LPthru filter
+  PORTB &= 0b11000000; // PORTB 5..0 = LP17_15, LPthru, HP160, HPthru, HP80, HP40 cleared
   PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
-  PORTD &= 0b00111111; // PORTC 7,6 = HP30, HP17 cleared
+  PORTD &= 0b00111111; // PORTD 7,6 = HP30, HP17 cleared
 }
+
 /************************** I2C subroutines ***************************************************************/
 
 // The slave is listening for filter switching commands from the master. Embedded into the filter
