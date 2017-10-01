@@ -36,15 +36,15 @@
                   |          MISO SCK RST         |
                   | NANO-V3                       |
                   +-------------------------------+
-#ifdef DEBUG_ARDUINO_MODE#ifdef DEBUG_ARDUINO_MODE
-  
-#else
-  
-#endif
-  
-#else
-  
-#endif
+  #ifdef DEBUG_ARDUINO_MODE#ifdef DEBUG_ARDUINO_MODE
+
+  #else
+
+  #endif
+
+  #else
+
+  #endif
   Rptt = Pin 8 (PB7) Wires to the crystal in an Arduino and N/A. Using it as a data line in this cct.
   I4   = Pin7 (PB6) Crystal input N/A on Arduino. (Input with pullups) on J6 connector
                   http://busyducks.com/ascii-art-arduinos
@@ -79,13 +79,13 @@
 
 // I2C Globals and constants
 #define baudRate 115200
-const uint8_t MY_ADDRESS = 42;
+const uint8_t MY_ADDRESS = 0x20; // Fixed by Hermes-Lite
 #ifdef FEATURE_I2C_LCD
 const uint8_t OTHER_ADDRESS = lcdAddr;
 #endif
 char I2C_sendBuf[32];
 uint8_t I2C_recBuf[32];
-uint8_t FILT = 0; //Commands received are placed in this variable
+// uint8_t FILT = 0; //Commands received are placed in this variable
 
 boolean last_state = HIGH;
 
@@ -198,7 +198,7 @@ void loop() {
         _status.txFilterNum = LP30_20;
         _status.rxFilterNum = HP30;
         break;
-      case 5: // 17/15 Metre band.   
+      case 5: // 17/15 Metre band.
         _status.txFilterNum = LP17_15;
         _status.rxFilterNum = HP17;
         break;
@@ -209,7 +209,7 @@ void loop() {
       case 7: // Roof and Floor filters.
         _status.txFilterNum = LPthru;
         _status.rxFilterNum = HP160;
-        break;        
+        break;
       default:
         _status.txFilterNum = LPthru;
         _status.rxFilterNum = HPthru;
@@ -342,7 +342,7 @@ void applyStatus()
   uint8_t pin;
 
   // First set transmit/receive state regardless of previous state i.e. may duplicate current setting.
-  if(_status.MOX_State == RX) {
+  if (_status.MOX_State == RX) {
     PORTD &= ~(1 << Tptt);  // Clear Tx mode
 #ifndef DEBUG_ARDUINO_MODE  // Don't change this in Arduino mode as it is the oscillator pin
     PORTB |= (1 << Rptt);   // Set to Rx mode
@@ -359,22 +359,22 @@ void applyStatus()
   // Turn on the new TX filter
   pin = (_status.txFilterNum >> 8);
 
-  #define T_PORT (* (volatile uint8_t *) (_status.txFilterNum & 0x00FF))
+#define T_PORT (* (volatile uint8_t *) (_status.txFilterNum & 0x00FF))
   T_PORT |= (1 << pin);
 
   // Turn on the new RX filter
-  pin = (_status.rxFilterNum >> 8);  
-  #define R_PORT (* (volatile uint8_t *) (_status.rxFilterNum & 0x00FF))
+  pin = (_status.rxFilterNum >> 8);
+#define R_PORT (* (volatile uint8_t *) (_status.rxFilterNum & 0x00FF))
   R_PORT |= (1 << pin);
 
-  lastState = _status; 
+  lastState = _status;
 }
 
 /**********************************************************************************************************/
 void clearFilters() // Does not change PORTB 6,7 (osc) or PORTD 0,1 (serial)
 {
   // Clear all the HP and LP filters except leave the LPthru filter connected
-//  PORTB |= (1 << PB4); // Set the LPthru filter
+  //  PORTB |= (1 << PB4); // Set the LPthru filter
   PORTB &= 0b11000000; // PORTB 5..0 = LP17_15, LPthru, HP160, HPthru, HP80, HP40 cleared
   PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
   PORTD &= 0b00111111; // PORTD 7,6 = HP30, HP17 cleared
@@ -384,20 +384,22 @@ void clearFilters() // Does not change PORTB 6,7 (osc) or PORTD 0,1 (serial)
 
 // The slave is listening for filter switching commands from the master. Embedded into the filter
 // values is the ptt state which is held in bit 7. Bits 6..4 contain the selected Tx filter value.
-// Bit 4 is for use and bits 3..0 hold the Rx filter value. For any change of state e.g band change,
-// ptt action including a CW key press or frequency excursion beyond the band edge this 8 bit value
-// is sent. It is the only data sent from Hermes-Lite so any received will be a valid ptt or filter.
+// Bit 3 is for general use. Bits 2..0 hold the Rx filter value. For any change of state e.g band
+// change, ptt action including a CW key press or frequency excursion beyond the band edge this 8 bit
+// value is sent. It is the only data sent from Hermes-Lite so any received will be a valid ptt or filter.
 
 // The receiveEvent captures the sent command in the filt variable and updates the _status struct
-// with ptt state, Tx filter value and Rx filter value.
+// with ptt state, Tx filter value and Rx filter value. Polling in main loop detects change to _status.
 
 void receiveEvent(int howMany)
 // called by I2C interrupt service routine when any incoming data arrives.
-// The command is sent as a uint8_t
+// The command is sent as a uint8_t and will be only ever 1 byte.
 {
   uint8_t filt = Wire.read();
+  uint8_t rxValue;
+  uint8_t txValue;
+  uint8_t auxValue;
 
-  lastState = _status;
   // Get the ptt state as we use this to decode the received FILT byte as a HPF or LPF value
 #if defined(FEATURE_Use_Hardware_Pin_for_MOX)
   // I4 (PORTB, 6) can be used for MOX or else the high order bit of I2C data
@@ -405,11 +407,68 @@ void receiveEvent(int howMany)
 #else
   _status.MOX_State = (filt & 0b10000000); // High order bit = MOX
 #endif
-  if (_status.MOX_State) { // We are receiving an Rx filter value
-    _status.rxFilterNum = (filt & 0b00000111);
-  } else { // We are receiving a Tx filter value
-    _status.txFilterNum = ((filt & 0b01110000) >> 4);
+
+  //Extract the transmit, receive filter values and auxilliary bit value.
+  txValue = ((filt & 0b01110000) >> 4);
+  rxValue = (filt & 0b00000111);
+  auxValue = ((filt & 0b00001000) >> 3);
+
+  // Build the value to go into the _status.txFilterNum
+  switch (txValue)
+  {
+    case 1: // 160 Metre band.
+      _status.txFilterNum = LP160;
+      break;
+    case 2: // 80 Metre band.
+      _status.txFilterNum = LP80;
+      break;
+    case 3: // 60/30 Metre band.
+      _status.txFilterNum = LP60_40;
+      break;
+    case 4: // 30/20 Metre band.
+      _status.txFilterNum = LP30_20;
+      break;
+    case 5: // 17/15 Metre band.
+      _status.txFilterNum = LP17_15;
+      break;
+    case 6: // 12/10 Metre band.
+      _status.txFilterNum = LPthru;
+      break;
+    case 7: // Roof and Floor filters.
+      _status.txFilterNum = LPthru;
+      break;
+    default:
+      _status.txFilterNum = LPthru;
   }
+
+  // Build the value to go into the _status.txFilterNum
+  switch (rxValue)
+  {
+    case 1: // 160 Metre band.
+      _status.rxFilterNum = HP160;
+      break;
+    case 2: // 80 Metre band.
+      _status.rxFilterNum = HP80;
+      break;
+    case 3: // 60/30 Metre band.
+      _status.rxFilterNum = HP40;
+      break;
+    case 4: // 30/20 Metre band.
+      _status.rxFilterNum = HP30;
+      break;
+    case 5: // 17/15 Metre band.
+      _status.rxFilterNum = HP17;
+      break;
+    case 6: // 12/10 Metre band.
+      _status.rxFilterNum = HP17;
+      break;
+    case 7: // Roof and Floor filters.
+      _status.rxFilterNum = HP160;
+      break;
+    default:
+      _status.rxFilterNum = HPthru;
+  }
+
 #if defined(DEBUG_SHOW_FILTER_SWITCH_SIGNALS)
   lcd.home();
   lcd.print("@receiveEvent()");
@@ -419,6 +478,8 @@ void receiveEvent(int howMany)
 #endif
 }
 
+/**********************************************************************************************************/
+/*
 void requestEvent()
 // This is called if the master has asked the slave for information. The
 // command to identify which info has been received by receiveEvent and
@@ -445,7 +506,7 @@ void requestEvent()
           }  // end of for loop
           /*    Wire.write(I2C_sendBuf);
                 Serial.print("@Slave:requestEvent(), Response sent = ");
-                Serial.println(I2C_sendBuf); */
+                Serial.println(I2C_sendBuf); star, slash
       //          Wire.write(I2C_sendBuf);
       //        break;   // send our ID
       //      }
@@ -469,9 +530,9 @@ void sendSensor (const byte which, uint8_t cmd)
       Wire.write(I2C_sendBuf[i]); // Chug out one char at a time.
     }  // end of for loop
 
-  */
+  star, slash
   Wire.write(I2C_sendBuf);
   //  Serial.println(I2C_sendBuf); // debug
 }  // end of sendSensor
-
+*/
 /**********************************************************************************************************/
