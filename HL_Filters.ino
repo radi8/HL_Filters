@@ -359,12 +359,12 @@ void applyStatus()
   // Turn on the new TX filter
   pin = (_status.txFilterNum >> 8);
 
-  #define T_PORT (* (volatile unsigned char *) (_status.txFilterNum & 0x00FF))
+  #define T_PORT (* (volatile uint8_t *) (_status.txFilterNum & 0x00FF))
   T_PORT |= (1 << pin);
 
   // Turn on the new RX filter
   pin = (_status.rxFilterNum >> 8);  
-  #define R_PORT (* (volatile unsigned char *) (_status.rxFilterNum & 0x00FF))
+  #define R_PORT (* (volatile uint8_t *) (_status.rxFilterNum & 0x00FF))
   R_PORT |= (1 << pin);
 
   lastState = _status; 
