@@ -36,37 +36,27 @@
                   |          MISO SCK RST         |
                   | NANO-V3                       |
                   +-------------------------------+
-  #ifdef DEBUG_ARDUINO_MODE#ifdef DEBUG_ARDUINO_MODE
 
-  #else
-
-  #endif
-
-  #else
-
-  #endif
   Rptt = Pin 8 (PB7) Wires to the crystal in an Arduino and N/A. Using it as a data line in this cct.
   I4   = Pin7 (PB6) Crystal input N/A on Arduino. (Input with pullups) on J6 connector
                   http://busyducks.com/ascii-art-arduinos
 
 
   PortB 0 HP40    out   | PortC 0 LP30_20 out   | PortD 0 NC    in (Serial) **
-      1 HP80    out   |       1 LP60_40 out   |       1 NC    in (Serial) **
-      2 HPthru  out   |       2 LP80    out   |       2 I1    in
-      3 HP160   out   |       3 LP160   out   |       3 I2    in
-      4 LPthru  out   |       4 SDA     in    |       4 I3    in
-      5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
-      6 I4      in    |       6 RESET   in    |       6 HP17  Pullup on PB6 and PB7 output Hi sets Rx modeout
-      7 Rptt    out   |       7 ???     in    |       7 HP30  out
+        1 HP80    out   |       1 LP60_40 out   |       1 NC    in (Serial) **
+        2 HPthru  out   |       2 LP80    out   |       2 I1    in
+        3 HP160   out   |       3 LP160   out   |       3 I2    in
+        4 LPthru  out   |       4 SDA     in    |       4 I3    in
+        5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
+        6 I4      in    |       6 RESET   in    |       6 HP17  Pullup on PB6 and PB7 output Hi sets Rx modeout
+        7 Rptt    out   |       7 ???     in    |       7 HP30  out
 
       These are the crystal pins and normally set with PORTB, Pullup on PB6 and PB7 output Hi sets Rx mode6 = Hi and PORTB, 7 = L0 with no pullups.
     ** Serial in pins needed for bootloading, PORTD, 0 = RXD and PORTD, 1 = TXD with no pullups
 */
 
-//const uint16_t LP12_10 = (PORTC << 8) + PC3;  // All Band bits clear = 10M filter in circuit and all other filters out.
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Main code starts here
+//                                          Code starts here
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Add includes here
@@ -77,17 +67,18 @@
 #endif
 // End of includes
 
-// I2C Globals and constants
+//Serial and I2C Globals and constants
 #define baudRate 115200
 const uint8_t MY_ADDRESS = 0x20; // Fixed by Hermes-Lite
 #ifdef FEATURE_I2C_LCD
 const uint8_t OTHER_ADDRESS = lcdAddr;
 #endif
-char I2C_sendBuf[32];
-uint8_t I2C_recBuf[32];
+
+//char I2C_sendBuf[32];
+//uint8_t I2C_recBuf[32];
 // uint8_t FILT = 0; //Commands received are placed in this variable
 
-boolean last_state = HIGH;
+//boolean last_state = HIGH;
 
 struct status {
   uint8_t J16signals;
@@ -113,14 +104,14 @@ LiquidCrystal_I2C lcd(lcdAddr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LC
 void setup() {
   // Setup the port directions
 #ifdef DEBUG_ARDUINO_MODE // We lose D0 and D1 plus B6 and B7 in Arduino mode
-  DDRB = DDRB | B00111111; // Don't change its 6,7 as these are oscillator
-  DDRD = DDRD | B11100000; // Don't change bits 0, 1 as these are serial pins. Set bits 7..5
-  DDRD = DDRD & B11100011; // Make sure bits 4..2 are inputs (D2, D3, D4 on Arduino)
+  DDRB = DDRB | B00111111; // Don't change its 7,6 as these are oscillator
+  DDRD = DDRD | B11100000; // Don't change bits 1, 0 as these are serial pins. Set bits 7..5
+  DDRD = DDRD & B11100011; // Make sure bits 4..2 are inputs (D4, D3, D2 on Arduino)
 #else
-  DDRB = 0b10111111;  // bits 0..5 outputs, bit 6 input, bit 7 output.
-  DDRD = 0b11100000;  // bits 0 .. 4 inputs, bits 5 .. 7 outputs.
+  DDRB = 0b10111111;  // bit 7 output, bit 6 input, bits 5 .. 0 outputs.
+  DDRD = 0b11100000;  // bits 7 .. 5 outputs, bits 4 .. 0 inputs.
 #endif
-  DDRC = 0b00001111;  // bits 0 .. 3 outputs, bits 4 .. 7 inputs.
+  DDRC = 0b00001111;  // bits 7 .. 4 inputs.bits 3 .. 0 outputs.
 
   //Set up port states for outputs and pullups for inputs
 #ifdef DEBUG_ARDUINO_MODE
@@ -154,9 +145,9 @@ void setup() {
 #ifdef FEATURE_SERIAL_PRINT
   //Initialize serial and wait for port to open:
   Serial.begin(baudRate);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for Leonardo only
-  }
+//  while (!Serial) {
+//    ; // wait for serial port to connect. Needed for Leonardo only
+//  }
   PrintSplash();
 #endif
   lastState = _status;
@@ -178,43 +169,46 @@ void loop() {
 
   // Special case when J16 = 0x07 (nothing connected, so all pins pulled high)
   // or J16 = 0x00 (no filter selected so use default).
-  if (_status.J16signals != lastState.J16signals) { // Only process input pins if something changed
-    Serial.print(F("Changed input = ")); Serial.println(_status.J16signals, BIN);
-    switch (_status.J16signals & 0b00000111)
-    {
-      case 1: // 160 Metre band.
-        _status.txFilterNum = LP160;
-        _status.rxFilterNum = HP160;
-        break;
-      case 2: // 80 Metre band.
-        _status.txFilterNum = LP80;
-        _status.rxFilterNum = HP80;
-        break;
-      case 3: // 60/30 Metre band.
-        _status.txFilterNum = LP60_40;
-        _status.rxFilterNum = HP40;
-        break;
-      case 4: // 30/20 Metre band.
-        _status.txFilterNum = LP30_20;
-        _status.rxFilterNum = HP30;
-        break;
-      case 5: // 17/15 Metre band.
-        _status.txFilterNum = LP17_15;
-        _status.rxFilterNum = HP17;
-        break;
-      case 6: // 12/10 Metre band.
-        _status.txFilterNum = LPthru;
-        _status.rxFilterNum = HP17;
-        break;
-      case 7: // Roof and Floor filters.
-        _status.txFilterNum = LPthru;
-        _status.rxFilterNum = HP160;
-        break;
-      default:
-        _status.txFilterNum = LPthru;
-        _status.rxFilterNum = HPthru;
+  if (_status.J16signals != 0x07) // Only process if something connected i.e. inputs are 0x06...0x00
+  {
+    if (_status.J16signals != lastState.J16signals) { // Only process input pins if something changed
+      Serial.print(F("Changed input = ")); Serial.println(_status.J16signals, BIN);
+      switch (_status.J16signals)
+      {
+        case 1: // 160 Metre band.
+          _status.txFilterNum = LP160;
+          _status.rxFilterNum = HP160;
+          break;
+        case 2: // 80 Metre band.
+          _status.txFilterNum = LP80;
+          _status.rxFilterNum = HP80;
+          break;
+        case 3: // 60/40 Metre band.
+          _status.txFilterNum = LP60_40;
+          _status.rxFilterNum = HP40;
+          break;
+        case 4: // 30/20 Metre band.
+          _status.txFilterNum = LP30_20;
+          _status.rxFilterNum = HP30;
+          break;
+        case 5: // 17/15 Metre band.
+          _status.txFilterNum = LP17_15;
+          _status.rxFilterNum = HP17;
+          break;
+        case 6: // 12/10 Metre band.
+          _status.txFilterNum = LPthru;
+          _status.rxFilterNum = HP17;
+          break;
+        case 7: // Roof and Floor filters.
+          _status.txFilterNum = LPthru;
+          _status.rxFilterNum = HP160;
+          break;
+        default:
+          _status.txFilterNum = LPthru;
+          _status.rxFilterNum = HPthru;
+      }
+      Serial.println(F("Processed a filter change"));
     }
-    Serial.println(F("Processed a filter change"));
   }
 
 #ifndef DEBUG_ARDUINO_MODE
@@ -237,7 +231,7 @@ void loop() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Subroutines start here
+//                                        Subroutines start here
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if defined(FEATURE_I2C_LCD)
@@ -393,7 +387,7 @@ void clearFilters() // Does not change PORTB 6,7 (osc) or PORTD 0,1 (serial)
 
 void receiveEvent(int howMany)
 // called by I2C interrupt service routine when any incoming data arrives.
-// The command is sent as a uint8_t and will be only ever 1 byte.
+// The data is only ever sent as a single uint8_t so there is no need for byte count checking.
 {
   uint8_t filt = Wire.read();
   uint8_t rxValue;
@@ -480,11 +474,11 @@ void receiveEvent(int howMany)
 
 /**********************************************************************************************************/
 /*
-void requestEvent()
-// This is called if the master has asked the slave for information. The
-// command to identify which info has been received by receiveEvent and
-// placed into the global "FILT" variable.
-{
+  void requestEvent()
+  // This is called if the master has asked the slave for information. The
+  // command to identify which info has been received by receiveEvent and
+  // placed into the global "FILT" variable.
+  {
   //  Serial.print("@Slave:requestEvent(), FILT = ");
   //  Serial.println(FILT, 10);
   switch (FILT)
@@ -512,11 +506,11 @@ void requestEvent()
       //      }
   }  // end of switch
   FILT = 0;
-}
+  }
 
-void sendSensor (const byte which, uint8_t cmd)
-// The integer value of the analog port is converted to a string and sent.
-{
+  void sendSensor (const byte which, uint8_t cmd)
+  // The integer value of the analog port is converted to a string and sent.
+  {
   int val = analogRead (which);
   //  uint8_t len;
 
@@ -533,6 +527,6 @@ void sendSensor (const byte which, uint8_t cmd)
   star, slash
   Wire.write(I2C_sendBuf);
   //  Serial.println(I2C_sendBuf); // debug
-}  // end of sendSensor
+  }  // end of sendSensor
 */
 /**********************************************************************************************************/
