@@ -8,9 +8,9 @@
 
    This program runs on an Atmega328P using the internal clock.
 
-  The Hermes-Lite project was first pioneered by Steve Haynal KF7O and the first set of boards and practical
-  build was pioneered by Rob Frohne KL7NA. From there numerous others have joined in to create this game
-  changing project.
+  The Hermes-Lite project was first pioneered by Steve Haynal KF7O and the first set of boards and
+  practical build was pioneered by Rob Frohne KL7NA. From there numerous others have joined in to
+  create this game changing project.
 *****************************************************************/
 
 /*
@@ -51,7 +51,8 @@
         6 I4      in    |       6 RESET   in    |       6 HP17  Pullup on PB6 and PB7 output Hi sets Rx modeout
         7 Rptt    out   |       7 ???     in    |       7 HP30  out
 
-      These are the crystal pins and normally set with PORTB, Pullup on PB6 and PB7 output Hi sets Rx mode6 = Hi and PORTB, 7 = L0 with no pullups.
+     * These are the crystal pins and normally set with PORTB, Pullup on PB6 and PB7 output Hi sets Rx 
+       mode6 = Hi and PORTB, 7 = L0 with no pullups.
     ** Serial in pins needed for bootloading, PORTD, 0 = RXD and PORTD, 1 = TXD with no pullups
 */
 
@@ -435,7 +436,7 @@ void receiveEvent(int howMany)
       _status.txFilterNum = LPthru;
   }
 
-  // Build the value to go into the _status.txFilterNum
+  // Build the value to go into the _status.rxFilterNum
   switch (rxValue)
   {
     case 1: // 160 Metre band.
