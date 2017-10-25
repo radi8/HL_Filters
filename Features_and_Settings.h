@@ -1,13 +1,14 @@
 // Features are chosen here. Uncomment the desired features
 
 //#define FEATURE_HL1               // HL1 uses data lines for filter switching
-//#define FEATURE_HL2               // HL2 uses I2C for filter switching
+//#define FEATURE_HL2               // HL2 uses I2C for filter switchingavrdude -c
+
 #define FEATURE_Use_Hardware_Pin_for_MOX
 #define FEATURE_Quisk
 //#define FEATURE_pihpsdr
 //#define FEATURE_Custom_Filter
 //#define FEATURE_I2C_LCD
-#define FEATURE_SERIAL_PRINT
+//#define FEATURE_SERIAL_PRINT
 #define FEATURE_Invert_Inputs     // Allows inverting or non-inverting buffers from HL to Arduino
 #define FEATURE_Invert_ptt_line   // Use for open collector driver where ptt tx is low active
 
@@ -17,7 +18,7 @@
 // The software can be tested on an Arduino if the commands which affect oscillator pins are ignored
 // Rptt = Pin 8 (PB7) and I4   = Pin7 (PB6) go to the crystal and not available on the Arduino board
 // As is D0 and D1 which are the serial inputs used for bootloading and serial monitoring
-#define DEBUG_ARDUINO_MODE
+//#define DEBUG_ARDUINO_MODE
 #define DEBUG_BAND_CHANGE        // Check the values arriving on User0 to User3
 #define DEBUG_PTT_CHANGE
 //#define DEBUG_SHOW_FILTER_SWITCH_SIGNALS

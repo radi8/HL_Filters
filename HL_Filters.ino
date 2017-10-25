@@ -48,10 +48,11 @@
         3 HP160   out   |       3 LP160   out   |       3 I2    in
         4 LPthru  out   |       4 SDA     in    |       4 I3    in
         5 LP17_15 out   |       5 SCL     in    |       5 Tptt  out
-        6 I4      in    |       6 RESET   in    |       6 HP17  Pullup on PB6 and PB7 output Hi sets Rx modeout
+        6 I4      in    |       6 RESET   in    |       6 HP17  out
         7 Rptt    out   |       7 ???     in    |       7 HP30  out
 
-     * These are the crystal pins and normally set with PORTB, Pullup on PB6 and PB7 output Hi sets Rx 
+       Pullup on PB6 forces PB7 output Hi and sets Rx mode
+       These are the crystal pins and normally set with PORTB, Pullup on PB6 and PB7 output Hi sets Rx
        mode6 = Hi and PORTB, 7 = L0 with no pullups.
     ** Serial in pins needed for bootloading, PORTD, 0 = RXD and PORTD, 1 = TXD with no pullups
 */
@@ -69,8 +70,8 @@
 // End of includes
 
 //Serial and I2C Globals and constants
-#define baudRate 115200
-const uint8_t MY_ADDRESS = 0x20; // Fixed by Hermes-Lite
+#define baudRate 19200
+const uint8_t MY_ADDRESS = 0x20; // Fixed by Hermes-Lite requirement
 #ifdef FEATURE_I2C_LCD
 const uint8_t OTHER_ADDRESS = lcdAddr;
 #endif
@@ -146,34 +147,65 @@ void setup() {
 #ifdef FEATURE_SERIAL_PRINT
   //Initialize serial and wait for port to open:
   Serial.begin(baudRate);
-//  while (!Serial) {
-//    ; // wait for serial port to connect. Needed for Leonardo only
-//  }
+  //  while (!Serial) {
+  //    ; // wait for serial port to connect. Needed for Leonardo only
+  //  }
   PrintSplash();
 #endif
   lastState = _status;
   applyStatus(); // Set filters to initial state in case the board is not connected to a radio.
 }
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                        Main Loop starts here
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
+  boolean HL1mode = false;
+
 #if defined(FEATURE_I2C_LCD)
   lcd_DisplayStatus();
 #endif
 
-  // Poll the input pins for a filter or ptt change and set the _status struct accordingly. The
-  // struct will be checked against the last time the pins were polled and processed if changed.
-#ifndef DEBUG_ARDUINO_MODE  // This is an oscillator pin in Arduino mode so don't read
-  _status.MOX_State = (PINB & (1 << mox));
-#endif
-  _status.J16signals = 0; //TODO check if this is an overkill and remove if so
-  _status.J16signals = ((PIND & 0b00011100) >> 2);
+  // Check to see whether an I2C device is connected or if the shorting plug is plugged in on the
+  // I2C connector. If the shorting plug is installed (HL1 mode), poll the input pins for a filter
+  // or pttchange and set the _status struct accordingly. The struct will be checked against the
+  // last time the pins were polled and processed if changed. I2C operates via an interrupt and
+  // does not need to be polled.
 
-  // Special case when J16 = 0x07 (nothing connected, so all pins pulled high)
-  // or J16 = 0x00 (no filter selected so use default).
-  if (_status.J16signals != 0x07) // Only process if something connected i.e. inputs are 0x06...0x00
-  {
-    if (_status.J16signals != lastState.J16signals) { // Only process input pins if something changed
+  if ((PINC & 0b000110000) == 0) { // Test for SDA and SCL both LOW (possibly shorting plug in)
+    delay(1);
+    if ((PINC & 0b000110000) == 0) { // After short delay test again for SDA and SCL both LOW
+      HL1mode = true;              // and if so we must have the shorting plug plugged in.
+    }
+  }
+
+  if (HL1mode) { // Only process if we are using a Hermes-Lite version HL1
+    /*
+        // In case there is RF from Hermes-Lite we switch to the transmit filters in order to
+        // isolate the receiver input. It is OK to hot switch the Tx filters.
+      #ifndef DEBUG_ARDUINO_MODE  // Don't change this in Arduino mode as it is the oscillator pin
+        PORTB &= ~(1 << Rptt);  // Clear Rx mode
+      #endif
+        PORTD |= (1 << Tptt);   // Set to Tx mode
+
+
+          digitalWrite(Tptt, HIGH);
+          delay(1000);
+          digitalWrite(Tptt, LOW);
+          delay(1000);
+          digitalWrite(Tptt, HIGH);
+          delay(1000);
+          digitalWrite(Tptt, LOW);
+          delay(1000);
+    */
+
+    // Now get the state of the J16 lines from HL1
+//    _status.J16signals = 0; //TODO check if this is an overkill and remove if so
+    _status.J16signals = ((PIND & 0b00011100) >> 2);
+
+    if ((_status.J16signals != lastState.J16signals)) { // Only process input pins if filter changed.
+#ifdef FEATURE_SERIAL_PRINT
       Serial.print(F("Changed input = ")); Serial.println(_status.J16signals, BIN);
+#endif
       switch (_status.J16signals)
       {
         case 1: // 160 Metre band.
@@ -208,11 +240,18 @@ void loop() {
           _status.txFilterNum = LPthru;
           _status.rxFilterNum = HPthru;
       }
+#ifdef FEATURE_SERIAL_PRINT
       Serial.println(F("Processed a filter change"));
+#endif
     }
-  }
 
+    // Having processed the filter commands, we now get the actual state of MOX .
 #ifndef DEBUG_ARDUINO_MODE
+    _status.MOX_State = (PINB & (1 << mox)); // This is an oscillator pin in Arduino mode so
+    // don't attempt to read read on an Arduino.
+#endif
+  } // Finished reading and recording state of input pins
+  
   if ((_status.txFilterNum != lastState.txFilterNum) | (_status.rxFilterNum != lastState.rxFilterNum) |
       (_status.MOX_State != lastState.MOX_State)) {
     applyStatus();
@@ -220,15 +259,6 @@ void loop() {
     PrintSplash();
 #endif
   }
-#else
-  if ((_status.txFilterNum != lastState.txFilterNum) | (_status.rxFilterNum != lastState.rxFilterNum)) {
-    Serial.println(F("and called applyStatus()"));
-    applyStatus();
-#ifdef FEATURE_SERIAL_PRINT
-    PrintSplash();
-#endif
-  }
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -463,7 +493,7 @@ void receiveEvent(int howMany)
     default:
       _status.rxFilterNum = HPthru;
   }
-
+  Serial.println(F("Signal processed via I2C"));
 #if defined(DEBUG_SHOW_FILTER_SWITCH_SIGNALS)
   lcd.home();
   lcd.print("@receiveEvent()");
