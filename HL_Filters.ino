@@ -493,7 +493,9 @@ void receiveEvent(int howMany)
     default:
       _status.rxFilterNum = HPthru;
   }
+#ifdef FEATURE_SERIAL_PRINT  
   Serial.println(F("Signal processed via I2C"));
+#endif  
 #if defined(DEBUG_SHOW_FILTER_SWITCH_SIGNALS)
   lcd.home();
   lcd.print("@receiveEvent()");
