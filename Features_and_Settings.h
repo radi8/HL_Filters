@@ -3,7 +3,6 @@
 //#define FEATURE_HL1               // HL1 uses data lines for filter switching
 //#define FEATURE_HL2               // HL2 uses I2C for filter switchingavrdude -c
 
-//#define FEATURE_Use_Hardware_Pin_for_MOX
 #define FEATURE_Quisk
 //#define FEATURE_pihpsdr
 //#define FEATURE_Custom_Filter

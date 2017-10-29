@@ -87,6 +87,7 @@ struct status {
   uint16_t txFilterNum;
   uint16_t rxFilterNum;
   boolean MOX_State; // true = Rx, false = Tx
+  boolean auxValue; // true = switch on 160M Rx filter, false filter switched off
 } _status;
 
 status lastState = _status;
@@ -96,6 +97,7 @@ status lastState = _status;
 // System global values
 const boolean RX = true;
 const boolean TX = false;
+boolean gHL1mode = false;
 
 #if defined(FEATURE_I2C_LCD)
 // Set the pins on the I2C chip used for LCD connections:
@@ -159,7 +161,6 @@ void setup() {
 //                                        Main Loop starts here
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
-  boolean HL1mode = false;
 
 #if defined(FEATURE_I2C_LCD)
   lcd_DisplayStatus();
@@ -170,15 +171,17 @@ void loop() {
   // or pttchange and set the _status struct accordingly. The struct will be checked against the
   // last time the pins were polled and processed if changed. I2C operates via an interrupt and
   // does not need to be polled.
-
   if ((PINC & 0b000110000) == 0) { // Test for SDA and SCL both LOW (possibly shorting plug in)
     delay(1);
     if ((PINC & 0b000110000) == 0) { // After short delay test again for SDA and SCL both LOW
-      HL1mode = true;              // and if so we must have the shorting plug plugged in.
+      gHL1mode = true;              // and if so we must have the shorting plug plugged in.
     }
   }
+  else {
+    gHL1mode = false;
+  }
 
-  if (HL1mode) { // Only process if we are using a Hermes-Lite version HL1
+  if (gHL1mode) { // Only process if we are using a Hermes-Lite version HL1
     /*
         // In case there is RF from Hermes-Lite we switch to the transmit filters in order to
         // isolate the receiver input. It is OK to hot switch the Tx filters.
@@ -387,10 +390,19 @@ void applyStatus()
 #define T_PORT (* (volatile uint8_t *) (_status.txFilterNum & 0x00FF))
   T_PORT |= (1 << pin);
 
-  // Turn on the new RX filter
-  pin = (_status.rxFilterNum >> 8);
+  // Turn on the RX filter only if in RX mode otherwise leave cleared for better Rx to Tx isolation
+  if (_status.MOX_State == RX) {
+    pin = (_status.rxFilterNum >> 8);
 #define R_PORT (* (volatile uint8_t *) (_status.rxFilterNum & 0x00FF))
-  R_PORT |= (1 << pin);
+    R_PORT |= (1 << pin);
+    
+    // Here we check to see if Aux value is set and switch in the 160M filter if so
+    if(_status.auxValue) {
+      pin = (HP160 >> 8);
+#define A_PORT (* (volatile uint8_t *) (HP160 & 0x00FF))
+        A_PORT |= (1 << pin);     
+    }
+  }
 
   lastState = _status;
 }
@@ -398,8 +410,7 @@ void applyStatus()
 /**********************************************************************************************************/
 void clearFilters() // Does not change PORTB 6,7 (osc) or PORTD 0,1 (serial)
 {
-  // Clear all the HP and LP filters except leave the LPthru filter connected
-  //  PORTB |= (1 << PB4); // Set the LPthru filter
+  // Clear all the HP and LP filters
   PORTB &= 0b11000000; // PORTB 5..0 = LP17_15, LPthru, HP160, HPthru, HP80, HP40 cleared
   PORTC &= 0b11110000; // PORTC 3..0 = LP160, LP80, LP60-40, LP30-20 cleared
   PORTD &= 0b00111111; // PORTD 7,6 = HP30, HP17 cleared
@@ -423,20 +434,15 @@ void receiveEvent(int howMany)
   uint8_t filt = Wire.read();
   uint8_t rxValue;
   uint8_t txValue;
-  uint8_t auxValue;
+//  uint8_t auxValue;
 
-  // Get the ptt state as we use this to decode the received FILT byte as a HPF or LPF value
-#if defined(FEATURE_Use_Hardware_Pin_for_MOX)
-  // I4 (PORTB, 6) can be used for MOX or else the high order bit of I2C data
-  _status.MOX_State = PINB, mox;
-#else
-  _status.MOX_State = (filt & 0b10000000); // High order bit = MOX
-#endif
+  // Get the ptt state
+  _status.MOX_State = (filt & 0b10000000); // High order bit = MOX (LOW = Tx, HIGH = Rx)
 
   //Extract the transmit, receive filter values and auxilliary bit value.
   txValue = ((filt & 0b01110000) >> 4);
   rxValue = (filt & 0b00000111);
-  auxValue = ((filt & 0b00001000) >> 3);
+  _status.auxValue = ((filt & 0b00001000) >> 3); // We use this to decide to turn on 160M filter or not
 
   // Build the value to go into the _status.txFilterNum
   switch (txValue)
