@@ -108,7 +108,7 @@ LiquidCrystal_I2C lcd(lcdAddr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LC
 void setup() {
   // Setup the port directions
 #ifdef DEBUG_ARDUINO_MODE // We lose D0 and D1 plus B6 and B7 in Arduino mode
-  DDRB = DDRB | B00111111; // Don't change its 7,6 as these are oscillator
+  DDRB = DDRB | B00111111; // Don't change bits 7,6 as these are oscillator
   DDRD = DDRD | B11100000; // Don't change bits 1, 0 as these are serial pins. Set bits 7..5
   DDRD = DDRD & B11100011; // Make sure bits 4..2 are inputs (D4, D3, D2 on Arduino)
 #else
@@ -431,14 +431,25 @@ void receiveEvent(int howMany)
 // called by I2C interrupt service routine when any incoming data arrives.
 // The data is only ever sent as a single uint8_t so there is no need for byte count checking.
 {
-  uint8_t filt = Wire.read();
+  uint8_t filt;
+  uint8_t cnt;
   uint8_t rxValue;
   uint8_t txValue;
-//  uint8_t auxValue;
+  uint8_t readValue;
 
   // Get the ptt state
-  _status.MOX_State = (filt & 0b10000000); // High order bit = MOX (LOW = Tx, HIGH = Rx)
+//  _status.MOX_State = (filt & 0b10000000); // High order bit = MOX (LOW = Tx, HIGH = Rx)
+  _status.MOX_State = (PINB & (1 << mox));
 
+  // Get the filter. The first byte is a latch for and second byte is filter value
+  for(cnt = 0; cnt<howMany; cnt++)
+  {
+    readValue = Wire.read();    // receive a byte as 8 bit unsigned integer
+    if(cnt == 1) {
+      filt = readValue;
+    }
+  }
+    
   //Extract the transmit, receive filter values and auxilliary bit value.
   txValue = ((filt & 0b01110000) >> 4);
   rxValue = (filt & 0b00000111);
